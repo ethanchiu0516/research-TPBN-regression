@@ -1,0 +1,912 @@
+############################################################
+# MBSP Version 2: TPBN-MBSP with Laplacian-added covariance
+# q = 1 version
+#
+# Model:
+#   y | beta, sigma2 ~ N(X beta, sigma2 I_n)
+#   beta | sigma2, psi, R_beta ~ N(0, sigma2 Sigma_beta)
+#   Sigma_beta = D_psi R_beta D_psi + phi L
+#   D_psi = diag(sqrt(psi_1), ..., sqrt(psi_p))
+#   psi_j | zeta_j ~ Gamma(u, zeta_j)
+#   zeta_j ~ Gamma(a, tau)
+#   R_beta ~ LKJ(eta)
+#   sigma2 ~ Inv-Gamma(d/2, k/2)
+#
+# Important:
+# - This is a standalone function, not a direct replacement of MBSP::MBSP().
+# - This version is written for a single response y, so q = 1.
+# - Gamma distributions use shape-rate parameterization.
+############################################################
+
+############################################################
+# 1. Basic helper functions
+############################################################
+
+rinvgamma <- function(n, shape, rate) {
+  1 / stats::rgamma(n = n, shape = shape, rate = rate)
+}
+
+safe_chol <- function(A, jitter = 1e-8, max_tries = 8) {
+  A <- (A + t(A)) / 2
+  p <- nrow(A)
+  
+  for (i in 0:max_tries) {
+    jj <- jitter * (10^i)
+    out <- try(chol(A + jj * diag(p)), silent = TRUE)
+    if (!inherits(out, "try-error")) {
+      return(list(chol = out, jitter_used = jj))
+    }
+  }
+  
+  stop("Cholesky decomposition failed even after adding jitter.")
+}
+
+safe_chol_inv <- function(A, jitter = 1e-8, max_tries = 8) {
+  ch <- safe_chol(A, jitter = jitter, max_tries = max_tries)$chol
+  chol2inv(ch)
+}
+
+safe_logdet_pd <- function(A, jitter = 1e-8, max_tries = 8) {
+  ch <- safe_chol(A, jitter = jitter, max_tries = max_tries)$chol
+  2 * sum(log(diag(ch)))
+}
+
+rmvn_from_precision_core <- function(mean, V_core, sigma2, jitter = 1e-8) {
+  # Draw from N(mean, sigma2 * V_core)
+  p <- length(mean)
+  ch <- safe_chol(V_core, jitter = jitter)$chol
+  as.numeric(mean + sqrt(sigma2) * t(ch) %*% stats::rnorm(p))
+}
+
+############################################################
+# 2. Construct graph Laplacian L from X
+############################################################
+
+construct_graph_laplacian <- function(X,
+                                      c_threshold = 0.3,
+                                      method = c("auto", "dense", "chunk"),
+                                      block_size = 500,
+                                      return_C = FALSE,
+                                      use_sparse = TRUE) {
+  method <- match.arg(method)
+  
+  X <- as.matrix(X)
+  n <- nrow(X)
+  p <- ncol(X)
+  
+  if (p < 2) {
+    L <- matrix(0, nrow = p, ncol = p)
+    return(list(C = NULL, W = L, L0 = L, L = L))
+  }
+  
+  if (method == "auto") {
+    method <- if (p <= 3000) "dense" else "chunk"
+  }
+  
+  Xs <- scale(X, center = TRUE, scale = TRUE)
+  Xs[!is.finite(Xs)] <- 0
+  
+  if (method == "dense") {
+    C <- crossprod(Xs) / (n - 1)
+    C <- as.matrix(C)
+    C[!is.finite(C)] <- 0
+    diag(C) <- 0
+    
+    W <- abs(C)
+    W[W <= c_threshold] <- 0
+    diag(W) <- 0
+    
+    d <- rowSums(W)
+    L0 <- diag(d, nrow = p, ncol = p) - W
+    tr_L0 <- sum(d)
+    
+    if (tr_L0 > 0) {
+      L <- (p / tr_L0) * L0
+    } else {
+      L <- matrix(0, nrow = p, ncol = p)
+    }
+    
+    L <- (L + t(L)) / 2
+    
+    return(list(
+      C = if (return_C) C else NULL,
+      W = W,
+      L0 = L0,
+      L = L
+    ))
+  }
+  
+  if (method == "chunk") {
+    if (!requireNamespace("Matrix", quietly = TRUE)) {
+      stop("The Matrix package is required for method = 'chunk'.")
+    }
+    
+    ii <- integer(0)
+    jj <- integer(0)
+    xx <- numeric(0)
+    
+    starts <- seq(1, p, by = block_size)
+    
+    for (s in starts) {
+      e <- min(s + block_size - 1, p)
+      idx <- s:e
+      C_block <- crossprod(Xs, Xs[, idx, drop = FALSE]) / (n - 1)
+      C_block[!is.finite(C_block)] <- 0
+      
+      for (local_col in seq_along(idx)) {
+        j <- idx[local_col]
+        candidate_i <- which(abs(C_block[, local_col]) > c_threshold)
+        candidate_i <- candidate_i[candidate_i < j]
+        
+        if (length(candidate_i) > 0) {
+          ii <- c(ii, candidate_i)
+          jj <- c(jj, rep(j, length(candidate_i)))
+          xx <- c(xx, abs(C_block[candidate_i, local_col]))
+        }
+      }
+    }
+    
+    if (length(xx) == 0) {
+      W <- Matrix::sparseMatrix(
+        i = integer(0),
+        j = integer(0),
+        x = numeric(0),
+        dims = c(p, p)
+      )
+    } else {
+      W <- Matrix::sparseMatrix(
+        i = c(ii, jj),
+        j = c(jj, ii),
+        x = c(xx, xx),
+        dims = c(p, p)
+      )
+    }
+    
+    d <- Matrix::rowSums(W)
+    L0 <- Matrix::Diagonal(x = d) - W
+    tr_L0 <- sum(d)
+    
+    if (tr_L0 > 0) {
+      L <- (p / tr_L0) * L0
+    } else {
+      L <- Matrix::Diagonal(p, x = rep(0, p))
+    }
+    
+    W_out <- if (use_sparse) W else as.matrix(W)
+    L0_out <- if (use_sparse) L0 else as.matrix(L0)
+    L_out <- as.matrix(L)
+    L_out <- (L_out + t(L_out)) / 2
+    
+    return(list(
+      C = NULL,
+      W = W_out,
+      L0 = L0_out,
+      L = L_out
+    ))
+  }
+  
+  stop("Unknown method in construct_graph_laplacian().")
+}
+
+############################################################
+# 3. LKJ correlation proposal by onion method
+############################################################
+
+rlkj_corr_onion <- function(K, eta = 1, jitter = 1e-10) {
+  if (K < 1) stop("K must be at least 1.")
+  if (eta <= 0) stop("eta must be positive.")
+  
+  R <- diag(K)
+  if (K == 1) return(R)
+  
+  beta_param <- eta + (K - 2) / 2
+  
+  r12 <- 2 * stats::rbeta(1, beta_param, beta_param) - 1
+  R[1, 2] <- r12
+  R[2, 1] <- r12
+  
+  if (K > 2) {
+    for (m in 2:(K - 1)) {
+      beta_param <- beta_param - 0.5
+      
+      y <- stats::rbeta(1, shape1 = m / 2, shape2 = beta_param)
+      
+      z <- stats::rnorm(m)
+      z <- z / sqrt(sum(z^2))
+      w <- sqrt(y) * z
+      
+      R_current <- R[1:m, 1:m, drop = FALSE]
+      L_current <- t(safe_chol(R_current, jitter = jitter)$chol)
+      
+      q <- as.numeric(L_current %*% w)
+      
+      R[1:m, m + 1] <- q
+      R[m + 1, 1:m] <- q
+    }
+  }
+  
+  R <- (R + t(R)) / 2
+  diag(R) <- 1
+  R
+}
+
+############################################################
+# 4. Sigma_beta and beta prior kernel
+############################################################
+
+make_sigma_beta <- function(psi, R_beta, L, phi = 1, jitter = 1e-8) {
+  p <- length(psi)
+  
+  psi <- pmax(psi, jitter)
+  D_psi <- diag(sqrt(psi), nrow = p, ncol = p)
+  
+  Sigma_beta <- D_psi %*% R_beta %*% D_psi + phi * L
+  Sigma_beta <- (Sigma_beta + t(Sigma_beta)) / 2
+  
+  Sigma_beta
+}
+
+log_beta_prior_kernel <- function(beta, sigma2, psi, R_beta, L, phi = 1, jitter = 1e-8) {
+  Sigma_beta <- make_sigma_beta(
+    psi = psi,
+    R_beta = R_beta,
+    L = L,
+    phi = phi,
+    jitter = jitter
+  )
+  
+  logdet_Sigma <- safe_logdet_pd(Sigma_beta, jitter = jitter)
+  inv_Sigma <- safe_chol_inv(Sigma_beta, jitter = jitter)
+  
+  quad <- as.numeric(t(beta) %*% inv_Sigma %*% beta)
+  
+  -0.5 * logdet_Sigma - 0.5 * quad / sigma2
+}
+
+############################################################
+# 5. Main function: MBSP Version 2
+############################################################
+MBSP_version2 <- function(y,
+                          X,
+                          u = 0.5,
+                          a = 0.5,
+                          eta = 1,
+                          tau = 0.0035,
+                          d = 3,
+                          k = NULL,
+                          c_threshold = 0.3,
+                          phi = 1,
+                          max_steps = 6000,
+                          burnin = 1000,
+                          proposal_sd_psi = 0.15,
+                          update_R = TRUE,
+                          R_update_every = 1,
+                          center_X = TRUE,
+                          center_y = TRUE,
+                          jitter = 1e-8,
+                          save_samples = TRUE,
+                          store_R_samples = FALSE,
+                          verbose = TRUE) {
+  
+  ############################################################
+  # 5.1 Input checks
+  ############################################################
+  
+  if (burnin >= max_steps) {
+    stop("burnin must be smaller than max_steps.")
+  }
+  
+  X <- as.matrix(X)
+  y <- as.numeric(y)
+  
+  n <- nrow(X)
+  p <- ncol(X)
+  
+  if (length(y) != n) {
+    stop("length(y) must equal nrow(X).")
+  }
+  
+  if (u <= 0 || a <= 0 || eta <= 0 || d <= 0) {
+    stop("u, a, eta, and d must be positive.")
+  }
+  
+  if (phi < 0) {
+    stop("phi must be nonnegative.")
+  }
+  
+  if (is.na(tau)) {
+    tau <- 1 / (p * sqrt(n * log(n)))
+  }
+  
+  if (tau <= 0) {
+    stop("tau must be positive.")
+  }
+  
+  if (length(proposal_sd_psi) == 1) {
+    proposal_sd_psi <- rep(proposal_sd_psi, p)
+  }
+  
+  if (length(proposal_sd_psi) != p) {
+    stop("proposal_sd_psi must be either a scalar or a vector of length p.")
+  }
+  
+  ############################################################
+  # 5.2 Center data
+  ############################################################
+  
+  X_center <- rep(0, p)
+  y_center <- 0
+  
+  if (center_X) {
+    X_center <- colMeans(X)
+    X <- scale(X, center = TRUE, scale = FALSE)
+  }
+  
+  if (center_y) {
+    y_center <- mean(y)
+    y <- as.numeric(scale(y, center = TRUE, scale = FALSE))
+  }
+  
+  ############################################################
+  # 5.3 Precompute quantities
+  ############################################################
+  
+  XtX <- crossprod(X)
+  Xty <- crossprod(X, y)
+  
+  lap_obj <- construct_graph_laplacian(X, c_threshold = c_threshold)
+  L <- lap_obj$L
+  
+  ############################################################
+  # 5.4 Initial values
+  ############################################################
+  
+  lambda_init <- 0.01
+  beta <- as.numeric(safe_chol_inv(XtX + lambda_init * diag(p), jitter = jitter) %*% Xty)
+  
+  resid <- as.numeric(y - X %*% beta)
+  
+  sigma2 <- stats::var(resid)
+  if (!is.finite(sigma2) || sigma2 <= 0) {
+    sigma2 <- stats::var(y)
+  }
+  if (!is.finite(sigma2) || sigma2 <= 0) {
+    sigma2 <- 1
+  }
+  
+  if (is.null(k)) {
+    k <- stats::var(resid)
+    if (!is.finite(k) || k <= 0) {
+      k <- sigma2
+    }
+  }
+  
+  psi <- rep(1, p)
+  zeta <- stats::rgamma(n = p, shape = a, rate = tau)
+  zeta <- pmax(zeta, jitter)
+  
+  R_beta <- diag(p)
+  
+  ############################################################
+  # 5.5 Storage
+  ############################################################
+  
+  n_keep <- max_steps - burnin
+  
+  if (save_samples) {
+    B_samples <- matrix(NA_real_, nrow = n_keep, ncol = p)
+    colnames(B_samples) <- paste0("X", 1:p)
+    sigma2_samples <- rep(NA_real_, n_keep)
+  } else {
+    B_samples <- NULL
+    sigma2_samples <- NULL
+  }
+  
+  if (store_R_samples) {
+    R_beta_samples <- array(NA_real_, dim = c(p, p, n_keep))
+  } else {
+    R_beta_samples <- NULL
+  }
+  
+  accept_psi <- rep(0, p)
+  propose_psi <- rep(0, p)
+  accept_R <- 0
+  propose_R <- 0
+  
+  ############################################################
+  # 5.6 MCMC
+  ############################################################
+  
+  keep_id <- 0
+  
+  for (iter in 1:max_steps) {
+    
+    if (verbose && iter %% 1000 == 0) {
+      cat("Iteration:", iter, "
+")
+    }
+    
+    ##########################################################
+    # Step 3.1 Update beta | rest
+    ##########################################################
+    
+    Sigma_beta <- make_sigma_beta(
+      psi = psi,
+      R_beta = R_beta,
+      L = L,
+      phi = phi,
+      jitter = jitter
+    )
+    
+    Sigma_beta_inv <- safe_chol_inv(Sigma_beta, jitter = jitter)
+    
+    A_beta <- XtX + Sigma_beta_inv
+    V_core <- safe_chol_inv(A_beta, jitter = jitter)
+    m_beta <- as.numeric(V_core %*% Xty)
+    
+    beta <- rmvn_from_precision_core(
+      mean = m_beta,
+      V_core = V_core,
+      sigma2 = sigma2,
+      jitter = jitter
+    )
+    
+    ##########################################################
+    # Step 3.2 Update sigma2 | rest
+    ##########################################################
+    
+    resid <- as.numeric(y - X %*% beta)
+    RSS <- sum(resid^2)
+    Q <- as.numeric(t(beta) %*% Sigma_beta_inv %*% beta)
+    
+    sigma2 <- rinvgamma(
+      n = 1,
+      shape = (d + n + p) / 2,
+      rate = (k + RSS + Q) / 2
+    )
+    
+    ##########################################################
+    # Step 3.3 Update psi_j by log-scale MH
+    ##########################################################
+    
+    current_log_beta_prior <- log_beta_prior_kernel(
+      beta = beta,
+      sigma2 = sigma2,
+      psi = psi,
+      R_beta = R_beta,
+      L = L,
+      phi = phi,
+      jitter = jitter
+    )
+    
+    for (j in 1:p) {
+      propose_psi[j] <- propose_psi[j] + 1
+      
+      log_psi_old <- log(psi[j])
+      log_psi_star <- log_psi_old + stats::rnorm(1, mean = 0, sd = proposal_sd_psi[j])
+      
+      psi_star_j <- exp(log_psi_star)
+      psi_star <- psi
+      psi_star[j] <- psi_star_j
+      
+      prop_log_beta_prior <- log_beta_prior_kernel(
+        beta = beta,
+        sigma2 = sigma2,
+        psi = psi_star,
+        R_beta = R_beta,
+        L = L,
+        phi = phi,
+        jitter = jitter
+      )
+      
+      log_gamma_old <- (u - 1) * log_psi_old - zeta[j] * psi[j]
+      log_gamma_star <- (u - 1) * log_psi_star - zeta[j] * psi_star_j
+      
+      # Jacobian term because proposal is symmetric in log(psi), not in psi.
+      log_alpha <- (prop_log_beta_prior + log_gamma_star + log_psi_star) -
+        (current_log_beta_prior + log_gamma_old + log_psi_old)
+      
+      if (log(stats::runif(1)) < log_alpha) {
+        psi[j] <- psi_star_j
+        current_log_beta_prior <- prop_log_beta_prior
+        accept_psi[j] <- accept_psi[j] + 1
+      }
+    }
+    
+    ##########################################################
+    # Step 3.4 Update zeta_j | psi_j
+    ##########################################################
+    
+    zeta <- stats::rgamma(
+      n = p,
+      shape = a + u,
+      rate = tau + psi
+    )
+    zeta <- pmax(zeta, jitter)
+    
+    ##########################################################
+    # Step 3.5 Update R_beta by LKJ independence MH proposal
+    ##########################################################
+    
+    if (update_R && iter %% R_update_every == 0) {
+      propose_R <- propose_R + 1
+      
+      R_star <- rlkj_corr_onion(K = p, eta = eta, jitter = jitter)
+      
+      log_prior_current_R <- log_beta_prior_kernel(
+        beta = beta,
+        sigma2 = sigma2,
+        psi = psi,
+        R_beta = R_beta,
+        L = L,
+        phi = phi,
+        jitter = jitter
+      )
+      
+      log_prior_star_R <- log_beta_prior_kernel(
+        beta = beta,
+        sigma2 = sigma2,
+        psi = psi,
+        R_beta = R_star,
+        L = L,
+        phi = phi,
+        jitter = jitter
+      )
+      
+      log_alpha_R <- log_prior_star_R - log_prior_current_R
+      
+      if (log(stats::runif(1)) < log_alpha_R) {
+        R_beta <- R_star
+        accept_R <- accept_R + 1
+      }
+    }
+    
+    ##########################################################
+    # Save posterior samples after burn-in
+    ##########################################################
+    
+    if (iter > burnin) {
+      keep_id <- keep_id + 1
+      
+      if (save_samples) {
+        B_samples[keep_id, ] <- beta
+        sigma2_samples[keep_id] <- sigma2
+      }
+      
+      if (store_R_samples) {
+        R_beta_samples[, , keep_id] <- R_beta
+      }
+    }
+  }
+  
+  ############################################################
+  # 5.7 Posterior summaries
+  ############################################################
+  
+  if (save_samples) {
+    B_mean <- colMeans(B_samples)
+    B_est <- apply(B_samples, 2, stats::median)
+    B_CI_lower <- apply(B_samples, 2, stats::quantile, probs = 0.025)
+    B_CI_upper <- apply(B_samples, 2, stats::quantile, probs = 0.975)
+    sigma2_est <- stats::median(sigma2_samples)
+  } else {
+    B_mean <- beta
+    B_est <- beta
+    B_CI_lower <- rep(NA_real_, p)
+    B_CI_upper <- rep(NA_real_, p)
+    sigma2_est <- sigma2
+  }
+  
+  active_predictors <- which(B_CI_lower > 0 | B_CI_upper < 0)
+  
+  accept_rate_psi <- accept_psi / pmax(propose_psi, 1)
+  accept_rate_R <- accept_R / max(propose_R, 1)
+  
+  ############################################################
+  # 5.8 Return output
+  ############################################################
+  
+  out <- list(
+    B_est = B_est,
+    B_mean = B_mean,
+    B_CI_lower = B_CI_lower,
+    B_CI_upper = B_CI_upper,
+    active_predictors = active_predictors,
+    B_samples = B_samples,
+    sigma2_est = sigma2_est,
+    sigma2_samples = sigma2_samples,
+    psi_last = psi,
+    zeta_last = zeta,
+    R_beta_last = R_beta,
+    R_beta_samples = R_beta_samples,
+    L = L,
+    W = lap_obj$W,
+    C = lap_obj$C,
+    accept_rate_psi = accept_rate_psi,
+    accept_rate_R = accept_rate_R,
+    settings = list(
+      n = n,
+      p = p,
+      u = u,
+      a = a,
+      eta = eta,
+      tau = tau,
+      d = d,
+      k = k,
+      c_threshold = c_threshold,
+      phi = phi,
+      max_steps = max_steps,
+      burnin = burnin,
+      proposal_sd_psi = proposal_sd_psi,
+      update_R = update_R,
+      R_update_every = R_update_every,
+      center_X = center_X,
+      center_y = center_y,
+      jitter = jitter
+    ),
+    data_center = list(
+      X_center = X_center,
+      y_center = y_center
+    )
+  )
+  
+  return(out)
+}
+
+############################################################
+# 6. Simulation design for the user's setting
+############################################################
+
+generate_X_version2 <- function(n, r1 = 0.5, r2 = 0.5, p = 100) {
+  r3 = 0
+  r4 = 0
+  if (p < 7) stop("p must be at least 7.")
+  if (abs(r1) >= 1) stop("r1 must be between -1 and 1.")
+  if (r2 <= -0.5 || r2 >= 1) stop("r2 must be between -0.5 and 1.")
+  
+  make_equicor <- function(k, r){
+    Sigma <- matrix(r, nrow = k, ncol = k)
+    diag(Sigma) <- 1
+    return(Sigma)
+  }
+  
+  Sigma12 <- matrix(c(1, r1,
+                      r1, 1),
+                    nrow = 2, byrow = TRUE)
+  
+  X12 <- MASS::mvrnorm(n = n, mu = c(0, 0), Sigma = Sigma12)
+  
+  Sigma345 <- matrix(r2, nrow = 3, ncol = 3)
+  diag(Sigma345) <- 1
+  
+  X345 <- MASS::mvrnorm(n = n, mu = c(0, 0, 0), Sigma = Sigma345)
+  
+  X67 <- MASS::mvrnorm(n = n, mu = c(0, 0), Sigma = diag(2))
+  
+  Sigma8_11 <- make_equicor(k = 4, r = r3)
+  X8_11 <- MASS::mvrnorm(n = n, mu = rep(0, 4), Sigma = Sigma8_11)
+  
+  Sigma12_14 <- make_equicor(k = 3, r = r4)
+  X12_14 <- MASS::mvrnorm(n = n, mu = rep(0, 3), Sigma = Sigma12_14)
+  
+  X_noise <- matrix(
+    stats::rnorm(n * (p - 14)),
+    nrow = n,
+    ncol = p - 14
+  )
+  
+  X <- cbind(X12, X345, X67, X8_11, X12_14, X_noise)
+  colnames(X) <- paste0("X", 1:p)
+  
+  X
+}
+
+run_version2_once <- function(n = 100,
+                              p = 100,
+                              r1 = 0.7,
+                              r2 = 0.5,
+                              sigma = 1,
+                              seed = 123,
+                              max_steps = 6000,
+                              burnin = 1000,
+                              update_R = TRUE) {
+  
+  set.seed(seed)
+  
+  X <- generate_X_version2(n = n, r1 = r1, r2 = r2, p = p)
+  beta_true <- c(1, 2, -1, -1, 2, 3, -2, rep(0, p - 7))
+  
+  y <- as.numeric(X %*% beta_true + stats::rnorm(n, mean = 0, sd = sigma))
+  
+  fit <- MBSP_version2(
+    y = y,
+    X = X,
+    u = 0.5,
+    a = 0.5,
+    eta = 1,
+    c_threshold = 0.3,
+    phi = 1,
+    max_steps = max_steps,
+    burnin = burnin,
+    update_R = update_R,
+    save_samples = TRUE,
+    verbose = TRUE
+  )
+  
+  result_table <- data.frame(
+    variable = paste0("X", 1:p),
+    beta_true = beta_true,
+    beta_hat_median = fit$B_est,
+    beta_hat_mean = fit$B_mean,
+    CI_lower = fit$B_CI_lower,
+    CI_upper = fit$B_CI_upper,
+    selected = 1:p %in% fit$active_predictors
+  )
+  
+  mse_beta <- mean((fit$B_est - beta_true)^2)
+  
+  true_active <- which(beta_true != 0)
+  selected <- fit$active_predictors
+  
+  TP <- sum(selected %in% true_active)
+  FP <- sum(!(selected %in% true_active))
+  FN <- sum(!(true_active %in% selected))
+  TN <- p - TP - FP - FN
+  
+  performance <- data.frame(
+    n = n,
+    p = p,
+    r1 = r1,
+    r2 = r2,
+    sigma = sigma,
+    MSE_beta = mse_beta,
+    TP = TP,
+    FP = FP,
+    FN = FN,
+    TN = TN,
+    accept_rate_R = fit$accept_rate_R,
+    mean_accept_rate_psi = mean(fit$accept_rate_psi),
+    selected_variables = paste0("X", selected, collapse = ", ")
+  )
+  
+  list(
+    fit = fit,
+    X = X,
+    y = y,
+    beta_true = beta_true,
+    result_table = result_table,
+    performance = performance
+  )
+}
+
+run_version2_replications <- function(n = 100,
+                                      p = 100,
+                                      r1 = 0.7,
+                                      r2 = 0.5,
+                                      sigma = 1,
+                                      n_rep = 100,
+                                      max_steps = 6000,
+                                      burnin = 1000,
+                                      update_R = TRUE) {
+  
+  all_beta <- list()
+  all_perf <- list()
+  
+  for (rep in 1:n_rep) {
+    cat("Running replication:", rep, "\n")
+    
+    tmp <- tryCatch({
+      run_version2_once(
+        n = n,
+        p = p,
+        r1 = r1,
+        r2 = r2,
+        sigma = sigma,
+        seed = 1000 + rep,
+        max_steps = max_steps,
+        burnin = burnin,
+        update_R = update_R
+      )
+    }, error = function(e) {
+      message("Replication ", rep, " failed: ", e$message)
+      NULL
+    })
+    
+    if (!is.null(tmp)) {
+      all_perf[[length(all_perf) + 1]] <- data.frame(
+        rep = rep,
+        tmp$performance
+      )
+      
+      all_beta[[length(all_beta) + 1]] <- data.frame(
+        rep = rep,
+        j = 1:p,
+        variable = paste0("X", 1:p),
+        beta_true = tmp$beta_true,
+        beta_hat = tmp$fit$B_est
+      )
+    }
+  }
+  
+  if (length(all_beta) == 0) {
+    stop("All replications failed.")
+  }
+  
+  beta_df <- do.call(rbind, all_beta)
+  perf_df <- do.call(rbind, all_perf)
+  
+  beta_summary <- do.call(rbind, lapply(split(beta_df, beta_df$j), function(df) {
+    data.frame(
+      j = unique(df$j),
+      variable = unique(df$variable),
+      beta_true = unique(df$beta_true),
+      mean_median = mean(df$beta_hat),
+      median_median = stats::median(df$beta_hat),
+      sd_median = stats::sd(df$beta_hat)
+    )
+  }))
+  rownames(beta_summary) <- NULL
+  
+  performance_summary <- data.frame(
+    n_success = nrow(perf_df),
+    n_fail = n_rep - nrow(perf_df),
+    mean_MSE_beta = mean(perf_df$MSE_beta),
+    sd_MSE_beta = stats::sd(perf_df$MSE_beta),
+    mean_TP = mean(perf_df$TP),
+    mean_FP = mean(perf_df$FP),
+    mean_FN = mean(perf_df$FN),
+    mean_TN = mean(perf_df$TN),
+    mean_accept_rate_R = mean(perf_df$accept_rate_R),
+    mean_accept_rate_psi = mean(perf_df$mean_accept_rate_psi)
+  )
+  
+  list(
+    performance_each_rep = perf_df,
+    performance_summary = performance_summary,
+    beta_each_rep = beta_df,
+    beta_summary = beta_summary
+  )
+}
+
+############################################################
+# 7. Example usage
+############################################################
+
+# Example 1: single run
+#out <- run_version2_once(
+#   n = 50,
+#   p = 20,
+#   r1 = 0.5,
+#   r2 = 0.5,
+#   sigma = 1,
+#   seed = 123,
+#   max_steps = 3000,
+#   burnin = 2000,
+#   update_R = TRUE
+#)
+#
+#out$result_table
+#out$performance
+
+
+
+# Example 2: multiple replications
+rep_out <- run_version2_replications(
+   n = 50,
+   p = 100,
+   r1 = 0,
+   r2 = 0,
+   sigma = 1,
+   n_rep = 50,
+   max_steps = 3000,
+   burnin = 2000,
+   update_R = TRUE
+ 
+)
+
+rep_out$performance_summary
+rep_out$beta_summary
+
+
+
+
