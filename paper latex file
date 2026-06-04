@@ -1,0 +1,2313 @@
+
+\documentclass[14pt]{extarticle} % 使用 extsize 的 extarticle 類別，並設定 12pt
+\usepackage{xeCJK}
+\setCJKmainfont{TW-Kai} %標楷體 編譯器要改XeLatex
+\usepackage[a4paper,margin=2cm]{geometry} %邊界margin=2cm
+\usepackage{amsmath}%數學式子
+\usepackage{amssymb}%因為所以符號
+\usepackage{subcaption}%多並排圖片
+\usepackage{enumerate}%(a)(b)(c)
+\usepackage{float}
+\usepackage{accents}%波浪號
+\usepackage{soul}%螢光筆
+\usepackage{cprotect}%跨行螢光筆
+\usepackage[table]{xcolor}
+%\underaccent{\sim}{x} 下波浪號
+\sethlcolor{yellow}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{comment}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{indentfirst}
+\usepackage{longtable}
+\usepackage{makecell}
+\usepackage{array}
+
+\begin{document}
+\pagenumbering{arabic}
+
+% 封面--------------------------------------------------------------------------
+
+ \begin{titlepage}
+ \centering
+ {\huge \bfseries 國\hspace{1cm}立\hspace{1cm}中\hspace{1cm}央\hspace{1cm}大\hspace{1cm}學 \\} \vspace{2cm}
+ \LARGE \text{\bfseries 統\hspace{1cm}計\hspace{1cm}研\hspace{1cm}究\hspace{1cm}所}\\
+ \LARGE \vspace{0.3cm}\bfseries 碩\hspace{1cm}士\hspace{1cm}論\hspace{1cm}文 \\ \vspace{3cm}
+ \LARGE   High-Dimensional and Highly Correlation Data for Bayesian Regression Model\\ \vspace{0.5cm}
+ \LARGE \bfseries  \\ \vspace{2cm}
+ \LARGE \bfseries 研 究 生\hspace{0.1cm}: 邱敍宸 \\\vspace{0.5cm}
+ \LARGE \bfseries \hspace{1.2cm}指導教授\hspace{0.1cm}: 王紹宣 \hspace{0.2cm}博士\\ \vspace{2cm}
+ \LARGE \bfseries 中\hspace{0.3cm}華\hspace{0.3cm}民\hspace{0.3cm}國\hspace{0.3cm}一\hspace{0.1cm}百\hspace{0.1cm}一\hspace{0.1cm}十\hspace{0.1cm}五\hspace{0.3cm}年\hspace{0.3cm}七\hspace{0.3cm}月
+ \end{titlepage}
+ \thispagestyle{empty}
+
+
+
+\newpage
+\section*{摘要}
+
+高維度且高度相關的迴歸資料是一個具有挑戰性的問題，因為解釋變數之間若存在強烈共線性，可能導致迴歸係數估計不穩定、變數選取結果不可靠，以及重要訊號被過度收縮。雖然 TPBN-MBSP 模型提供了一個有效的 Bayesian global-local shrinkage 架構，可用於高維度稀疏迴歸分析，但其原始先驗結構並未明確納入解釋變數之間的相關性資訊。為了改善此限制，本論文提出一個修正後的 TPBN-MBSP 方法，透過引入考量相關性結構的先驗共變異矩陣來描述迴歸係數之間的相依關係。
+
+本文所提出的方法先由解釋變數的樣本相關係數矩陣建立 predictor graph，並利用對應的 graph Laplacian matrix 將相依資訊納入迴歸係數的先驗分布中。具體而言，本文將先驗共變異矩陣修改為
+\[
+\Sigma_\beta = D_\psi R_\beta D_\psi + \phi L,
+\]
+其中 \(D_\psi\) 保留 local shrinkage 結構，\(R_\beta\) 用以捕捉迴歸係數之間的相關性，而 \(L\) 則反映高度相關解釋變數之間的圖形結構。此外，本文也使用 onion method 在後驗計算過程中產生有效且正定的相關矩陣。
+
+模擬研究結果顯示，在不同相關性設定下，本文所提出的方法特別適用於解釋變數具有高度相關或近乎完全相關的情境。相較於原始 TPBN-MBSP 模型，本文方法能夠降低相關雜訊變數所造成的假訊號，並在嚴重共線性的情況下提升估計穩定性。進一步透過鑽石價格資料與房價資料進行實際資料分析，結果顯示本文方法在維持具競爭力的預測表現下，能夠提供更具彈性且考量相關性結構的變數選取架構。整體而言，本文所提出的方法可被視為 TPBN-MBSP 在處理高維度且高度相關迴歸問題時的一個結構化延伸。
+\newpage
+\section*{Abstract}
+
+High-dimensional regression with highly correlated predictors is a challenging problem because strong multicollinearity may lead to unstable coefficient estimation, unreliable variable selection, and excessive shrinkage of important signals. Although the TPBN-MBSP model provides an effective Bayesian global-local shrinkage framework for sparse high-dimensional regression, its original prior structure does not explicitly incorporate the correlation information among predictors. To address this limitation, this thesis proposes a modified TPBN-MBSP method by introducing a correlation-aware prior covariance structure for the regression coefficients.
+
+The proposed method constructs a predictor graph from the empirical correlation matrix and uses the corresponding graph Laplacian matrix to incorporate dependence information into the coefficient prior. Specifically, the prior covariance matrix is modified as 
+\[
+\Sigma_\beta = D_\psi R_\beta D_\psi + \phi L,
+\]
+where \(D_\psi\) retains the local shrinkage structure, \(R_\beta\) captures coefficient-level correlation, and \(L\) reflects the graph structure among highly correlated predictors. The onion method is also used to generate valid positive definite correlation matrices during posterior computation.
+
+Simulation studies under different correlation settings show that the proposed method is especially useful when predictors are strongly or nearly perfectly correlated. Compared with the original TPBN-MBSP model, the proposed method can reduce false signals among correlated noise variables and improve estimation stability under severe multicollinearity. Real data analyses using diamond price data and house price data further demonstrate that the proposed method maintains competitive predictive performance while providing a more flexible and correlation-aware variable selection framework. Overall, the proposed method can be viewed as a structured extension of TPBN-MBSP for high-dimensional regression problems involving highly correlated predictors.
+
+\newpage
+
+\section*{Acknowledgements}
+%\addcontentsline{toc}{chapter}{Acknowledgements}
+
+本論文能夠順利完成，首先我想要感謝我的指導教授王紹宣老師，無論在開會的報告以及論文的撰寫、靈感等，教授都給我很多的建議以及情緒價值，讓我對我的研究保持著信心並且走在正確的軌道上。
+
+謝謝在背後支持我的家人，如果沒有你們的支持，我也無法順利完成學業。謝謝我的老同學冠永、映捷、蓋瑞，謝謝你們陪我走過了半年的研究低潮。謝謝房東南哥以及我的鄰居佑德、子浩等人，在雞排店後面鬼混的日子我不會忘記的。謝謝在研究室的同學們，雖然搞研究的路上都不輕鬆，但是我們都挺過來了。謝謝林清澤、伯伯這些健人，是你們告訴我健身要拚，我才有體力面對電腦前的數學。謝謝桌球隊，你們很酷。
+
+最後，我想要謝謝我自己，雖然這兩年過得真的是九彎十八拐，我都不知道該哭還是該笑，但是我會帶著在這邊的回憶、所學、教訓繼續向前，不管未來我在哪裡，至少這兩年我沒有白過日子。祝福在中央碰到的各位以及我自己，前程錦錦錦錦，有緣我們再相見把酒憶當年。
+
+
+%本論文能夠順利完成，首先我想要感謝我的指導教授黃士峰老師。無論是在計畫的報告或論文撰寫中給予我許多寶貴的建議與協助。並在這兩年來不厭其煩地督促我，提供我許多學習及處事上的指導，在此致上最深的謝意。感謝我的兩位口試委員邱海唐老師以及陳春樹老師，謝謝海唐老師在研究期間給予我許多研究方法上的建議，也謝謝春樹老師提供許多論文架構的細心建議以及改進，讓這篇論文更加完整。也感謝兩年來指導過我的老師們，讓我更深入統計這個領域。
+
+%感謝一直在背後支持著我的家人，如果沒有你們的支持，我也無法順利完成學業。也要感謝子芯學姊在研究以及行政流程上給予的提醒以及協助。這裡也要謝謝研究室的同學們在這兩年間的陪伴，無論是同學們之間的互相內卷，還是一起到三更半夜的消夜、Joggernauts、The Finals、幻獸帕魯、女鬼橋、猴子射氣球、Balatro以及聯盟戰旗，這些都是讓我繼續堅持下去的動力，感謝大家讓我的研究所生活更加快樂。還要感謝在中央排球場的球友們，讓我在兩年間的排球之路沒有懈怠。
+
+%研究求學的過程雖然充滿挑戰，但在眾多師長、同學和家人的協助下，讓我能夠順利完成學業。所有曾經幫助過我的人，我都銘記在心，並將這份感謝化為繼續前進的動力。
+
+\vspace{1cm}
+\begin{flushright}
+邱敍宸\ 謹誌於\\
+國立中央大學統計研究所\\
+中華民國一一五年六月
+\end{flushright}
+
+\newpage
+
+\tableofcontents
+\newpage
+
+
+
+\newpage
+
+\section{Introduction}\label{sec:introduction}
+
+High-dimensional regression with strongly correlated predictors arises routinely in modern applications such as genomics, imaging, and finance. In such settings, the number of predictors $p$ can exceed the sample size $n$, while only a small subset of predictors is expected to be truly associated with the response(s). A widely used Bayesian strategy for sparse learning is to adopt \emph{global--local} (GL) shrinkage priors, which combine substantial prior mass near zero with heavy tails to avoid over-shrinking large signals. This behavior makes GL priors attractive for inducing sparsity and stabilizing estimation in high dimensions. In the multivariate linear regression model
+\begin{equation}
+Y = X B + E,
+\qquad E_i \stackrel{\text{i.i.d.}}{\sim} N_q(0,\Sigma),
+\label{eq:mvr}
+\end{equation}
+Bai and Ghosh (2018) proposed the \emph{Multivariate Bayesian model with Shrinkage Priors} (MBSP), which places a matrix-normal GL prior on the coefficient matrix $B$ to encourage row-wise sparsity and enable variable selection in multivariate regression. In particular, MBSP is formulated via a matrix-normal likelihood and a matrix-normal prior on $B$ with row-specific local scales, i.e.,
+\begin{equation}
+Y \mid X,B,\Sigma \sim MN_{n\times q}(XB, I_n, \Sigma),
+B \mid \xi_1,\ldots,\xi_p,\Sigma \sim MN_{p\times q}\!\big(0,\ \tau\,\mathrm{diag}(\xi_1,\ldots,\xi_p),\ \Sigma\big)
+\label{eq:mbsp_core}
+\end{equation}
+with $\xi_1,\ldots,\xi_p$ following a polynomial-tailed GL prior.  %
+Theoretical results in \cite{BaiGhosh2018} further provide sufficient conditions under which the posterior can be consistent even when $p>n$ and $p$ grows nearly exponentially with $n$.
+
+A particularly convenient and widely used GL family is the \emph{three-parameter beta normal} (TPBN) family. Bai and Ghosh (2018) show how MBSP can be implemented using TPBN as a special case and describe a fully Bayesian MBSP-TPBN specification with conjugate components that admit closed-form full conditionals for Gibbs sampling. %
+In the TPBN hierarchy, each coefficient (or each row-scale in the multivariate case) is endowed with a local scale parameter governed by a heavy-tailed mixing distribution; several popular priors (e.g., the horseshoe) appear as special cases.  %
+These developments make TPBN-MBSP an appealing baseline for sparse multivariate learning in large $p$ problems.
+
+Despite these strengths, a recurring practical challenge in high-dimensional regression is that \emph{strong predictor correlation} can degrade the stability of shrinkage-based learning and variable selection. When many predictors are nearly collinear, information about the signal can be spread across correlated features, and posterior shrinkage may concentrate on arbitrary representatives within a correlated group. This phenomenon can manifest as unstable selection across runs, inflated posterior uncertainty within highly correlated blocks, and reduced predictive performance when the fitted model fails to borrow strength across correlated predictors. While TPBN-MBSP is designed for sparsity and scalability, it does not, by default, encode explicit structure among predictors beyond the shrinkage hierarchy. Consequently, in settings dominated by high correlation, additional structure is desirable so that the prior can encourage \emph{coherent behavior} (e.g., smoothing or grouping) among coefficients attached to strongly related predictors.
+
+The main goal of this thesis is to improve TPBN-MBSP in the presence of high predictor correlation by introducing a \emph{graph-structured} dependence component into the prior for regression coefficients. Specifically, we construct a weighted graph on predictors using a thresholded empirical correlation matrix and form the corresponding (scaled) graph Laplacian $L$. The Laplacian is then incorporated into the coefficient prior through a structured covariance component. In the univariate case (for clarity of exposition), letting $\beta\in\mathbb{R}^p$ denote the coefficient vector, our Version~2 algorithm modifies the prior covariance to
+\begin{equation}
+\Sigma_\beta \;=\; D_{\psi}\,R_{\beta}\,D_{\psi} \;+\; \phi\,L,
+\label{eq:version2_sigbeta_intro}
+\end{equation}
+where $D_{\psi}=\mathrm{diag}(\sqrt{\psi_1},\ldots,\sqrt{\psi_p})$ collects TPBN-style local shrinkage parameters, $R_{\beta}$ is a correlation matrix governing residual dependence among coefficients, and $\phi>0$ controls the strength of the Laplacian contribution. This construction preserves the global--local shrinkage mechanism (via $\psi_j$) while injecting a graph-based smoothing/grouping effect (via $L$), thereby explicitly targeting the core difficulty of highly correlated predictors. In the resulting posterior computation, every update involving $\Sigma_\beta$ (e.g., $\beta$, $\sigma^2$, and Metropolis steps for local scales and correlation parameters) automatically propagates the Laplacian structure, enabling the sampler to share information across correlated features rather than treating them as exchangeable a priori.
+
+A second computational ingredient in our Version~2 algorithm is an efficient mechanism for sampling (or proposing) correlation matrices for $R_{\beta}$. We adopt the \emph{onion method} of Lewandowski, Kurowicka, and Joe (2009), which generates random correlation matrices by sequentially augmenting dimension while maintaining positive definiteness by construction.
+The onion method exploits a block partition identity and a determinant recursion for correlation matrices, and it yields an explicit algorithm based on Beta draws and uniform samples on hyperspheres; practical implementation can use the Cholesky decomposition for numerical efficiency. 
+In our MCMC implementation, onion-based proposals provide a principled LKJ-type independence proposal for $R_\beta$, simplifying acceptance ratios and helping avoid the numerical difficulties that can arise from naive random-walk proposals in high dimension.
+
+In summary, this thesis focuses on the high-correlation regime where standard shrinkage approaches can exhibit weaker empirical performance. Building upon TPBN-MBSP and its efficient Gibbs sampling framework, we develop a Version~2 algorithm that incorporates predictor-graph information through a Laplacian-augmented prior covariance and leverages onion-based correlation matrix generation for stable posterior computation.
+The remainder of the thesis is organized as follows. Chapter~2 reviews development and applications of regression methods for high-dimensional or highly correlated data, as well as TPBN, graph Laplacian theory, and the onion method. Chapter~3 introduces method we propose and details the MCMC algorithm. Chapter~4 evaluates the proposed method through simulation studies designed to emphasize strong predictor correlation, and Chapter~5 presents an application to real high-dimensional data with pronounced correlation structure. Chapter~6 discuss the future work and our conclusions.
+
+
+
+\newpage
+\section{Literature Review}
+High-dimensional regression with \emph{highly correlated predictors} poses two intertwined challenges: (i) \textbf{statistical indentifiability and stability} (many coefficient vectors can fit nearly equally well under collinearity), and (ii) \textbf{interpretability under redundancy} (selection prededures may arbitrarily choose one variable among a correlated cluster). In this chapter's literature review, previous methods for handling high-dimensional and highly correlated data will first be discussed. Then, according to the methods adopted in this study, the applications of \textbf{graph Laplacian theory}, \textbf{Bayesian global-local shrinkage}, and the \textbf{onion method} in regression analysis will be introduced in sequence.
+
+\subsection{High-Dimensional Regression with Highly Correlated Predictors}
+Consider linear regression $y = X\beta^\star + \varepsilon$ with correlated columns of $X$. Near-collinearity implies that distinct sparse vectors can yield similar predictions, making selection unstable and rendering certain lasso-style sufficient conditions stringent. This motivated penalties ans priors that encourage grouping effects, fuse coefficients along correlation structure, or explicitly encode dependence graphs.
+
+\subsubsection{Correlation Stabilization and Grouping via Mixed Norms}
+
+Elastic Net combines the $\ell_1$ lasso penalty with an $\ell_2$ ``ridge'' penalty to improve stability when predictors are highly correlated, yielding a grouping effect in which strongly correlated variables tend to enter or leave the model together. Consider the standard linear regression setting
+\[
+y = X\beta + \varepsilon,
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n \times p}$ is the design matrix, and $\beta \in \mathbb{R}^p$ is the regression coefficient vector. In this framework, the elastic net estimator is obtained by solving
+\[
+\hat{\beta}^{EN}
+=
+\arg\min_{\beta}
+\left\{
+\frac{1}{2n}\|y-X\beta\|_2^2
++
+\lambda_1 \|\beta\|_1
++
+\lambda_2 \|\beta\|_2^2
+\right\},
+\]
+where
+\[
+\|\beta\|_1=\sum_{j=1}^p |\beta_j|,
+\qquad
+\|\beta\|_2^2=\sum_{j=1}^p \beta_j^2.
+\]
+Here, the $\ell_1$ term encourages sparsity and performs variable selection, whereas the $\ell_2$ term shrinks correlated coefficients toward each other and improves numerical stability when predictors are highly collinear.
+
+Zou and Hastie (2005) introduced the elastic net for high-dimensional settings (where $p \gg n$), showing that the added $\ell_2$ term helps mitigate the instability of the lasso under correlated designs and presenting an algorithm (LARS-EN) to compute the solution path. Their formulation is often written in the equivalent mixed-penalty form
+\[
+\hat{\beta}^{EN}
+=
+\arg\min_{\beta}
+\left\{
+\frac{1}{2n}\|y-X\beta\|_2^2
++
+\lambda
+\left(
+\alpha \|\beta\|_1
++
+\frac{1-\alpha}{2}\|\beta\|_2^2
+\right)
+\right\},
+\]
+where $\lambda > 0$ controls the overall amount of regularization and $\alpha \in [0,1]$ determines the balance between the two penalties. In particular, $\alpha=1$ corresponds to the lasso, $\alpha=0$ corresponds to ridge regression, and $0<\alpha<1$ yields the elastic net. This representation makes clear how the method simultaneously achieves shrinkage and variable selection. Moreover, when two predictors are strongly correlated, the elastic net tends to assign them similar estimated coefficients, reflecting the grouping effect, that is,
+\[
+x_j \approx x_k
+\quad \Longrightarrow \quad
+\hat{\beta}^{EN}_j \approx \hat{\beta}^{EN}_k.
+\]
+
+This formulation has been widely adopted in practice: Friedman, Hastie, and Tibshirani (2010) developed fast coordinate-descent routines (the \texttt{glmnet} package) to fit elastic-net-penalized linear and generalized linear models efficiently. As a result, elastic net regularization is routinely used in applications such as genomics and other ``large $p$, small $n$'' problems, allowing one to fit linear, logistic, Poisson, and Cox regression models while automatically handling groups of correlated predictors and providing more stable estimates than the pure lasso.
+
+\subsubsection{Clustering and Group Sparsity for Correlated Predictors}
+
+For regression problems involving highly correlated predictors, an important line of research has focused on methods that combine sparsity with clustering or groupwise structure in order to alleviate the instability of variable selection under multicollinearity. Consider the standard linear regression model
+\[
+y = X\beta + \varepsilon,
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n\times p}$ is the design matrix, and $\beta \in \mathbb{R}^p$ is the coefficient vector. In this context, Bondell and Reich (2008) proposed OSCAR, a regularization method that combines an $\ell_1$ penalty with a pairwise penalty encouraging certain regression coefficients to be exactly equal, thereby achieving simultaneous variable selection and supervised clustering of predictors. The OSCAR estimator can be written as
+\[
+\hat{\beta}^{\text{OSCAR}}
+=
+\arg\min_{\beta}
+\left\{
+\frac{1}{2}\|y-X\beta\|_2^2
++
+\lambda_1 \sum_{j=1}^p |\beta_j|
++
+\lambda_2 \sum_{j<k}\max\bigl(|\beta_j|,|\beta_k|\bigr)
+\right\},
+\]
+where the $\ell_1$ term encourages sparsity and the pairwise $\max(\cdot,\cdot)$ penalty promotes equality among some coefficients. This formulation is particularly well suited to high-dimensional settings with correlated covariates, since redundant predictors can be assigned identical coefficients rather than being selected in an arbitrary ``pick-one'' manner, thus improving interpretability and stability.
+
+A related but distinct direction was developed by Yuan and Lin (2006), who introduced the group lasso framework for regression models with grouped variables. Suppose that the predictors are partitioned into $G$ predefined groups, and let $\beta_g$ denote the subvector of coefficients corresponding to group $g$. By imposing penalties based on group norms, the group lasso estimator is defined as
+\[
+\hat{\beta}^{\text{Group}}
+=
+\arg\min_{\beta}
+\left\{
+\frac{1}{2}\|y-X\beta\|_2^2
++
+\lambda \sum_{g=1}^G w_g \|\beta_g\|_2
+\right\},
+\]
+where $w_g$ is a group-specific weight, often chosen as $\sqrt{p_g}$ with $p_g$ denoting the size of group $g$. Because the penalty is imposed on the entire subvectors $\beta_g$, group lasso performs selection at the level of whole groups and is therefore especially useful when correlation among predictors is aligned with known structural groupings, such as basis expansions, categorical factors, or biological pathways. This framework was later extended by Meier, van de Geer, and B\"uhlmann (2008) to logistic regression, where the group lasso was shown to provide an efficient and effective approach for high-dimensional generalized linear models with grouped predictors, transferring the advantages of groupwise stabilization to classification problems.
+
+However, because group lasso selects or discards entire groups, it may be overly restrictive when only a subset of variables within a relevant group contributes to the response. To address this limitation, Simon, Friedman, Hastie, and Tibshirani (2013) proposed the sparse-group lasso, which combines the group lasso penalty with the standard lasso penalty to enforce both group-level sparsity and within-group sparsity. Its estimator takes the form
+\[
+\hat{\beta}^{\text{SGL}}
+=
+\arg\min_{\beta}
+\left\{
+\frac{1}{2}\|y-X\beta\|_2^2
++
+(1-\alpha)\lambda \sum_{g=1}^G w_g \|\beta_g\|_2
++
+\alpha\lambda \|\beta\|_1
+\right\},
+\]
+where $\alpha \in [0,1]$ controls the balance between groupwise and elementwise sparsity. When $\alpha=0$, the method reduces to the group lasso, whereas larger values of $\alpha$ allow additional sparsity within selected groups. This hybrid regularization scheme is particularly attractive in modern high-dimensional applications, such as multi-omics analysis and functional regression, where predictors often exhibit meaningful grouping structures but only a portion of the variables within selected groups are truly informative.
+
+Taken together, these methods demonstrate that in the presence of strong predictor correlation, regression performance can be substantially improved by moving beyond purely elementwise sparsity and incorporating either coefficient clustering or structured groupwise regularization into the estimation procedure.
+
+
+
+\subsubsection{Fusion/TV/Generalized Lasso for Structured Correlation}
+
+In regression settings where predictors exhibit structured local dependence, an important class of methods has emerged around fusion-based and total-variation-type penalties. Consider the standard regression framework
+\[
+y = X\beta + \varepsilon,
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n\times p}$ is the design matrix, and $\beta \in \mathbb{R}^p$ is the coefficient vector. Tibshirani, Saunders, Rosset, Zhu, and Knight (2005) introduced the fused lasso, which augments the standard $\ell_1$ penalty on regression coefficients with an additional $\ell_1$ penalty on successive differences between adjacent coefficients. The fused lasso estimator can be written as
+\[
+\hat{\beta}^{\text{FL}}
+=
+\arg\min_{\beta}
+\left\{
+\frac{1}{2}\|y-X\beta\|_2^2
++
+\lambda_1 \sum_{j=1}^p |\beta_j|
++
+\lambda_2 \sum_{j=2}^p |\beta_j-\beta_{j-1}|
+\right\}.
+\]
+This formulation yields estimates that are simultaneously sparse and piecewise constant, making it especially suitable for ordered predictors, such as those indexed by time, space, or genomic location, where neighboring variables are often highly correlated and expected to exert similar effects. By encouraging adjacent coefficients to be equal through the fusion penalty
+\[
+\sum_{j=2}^p |\beta_j-\beta_{j-1}|,
+\]
+the fused lasso stabilizes estimation across correlated neighborhoods while still permitting abrupt changes when supported by the data.
+
+This line of work was substantially generalized by Tibshirani and Taylor (2011), who proposed the generalized lasso framework, in which the successive-difference operator is replaced by a general linear operator $D$ and the penalty takes the form
+\[
+\hat{\beta}^{\text{GL}}
+=
+\arg\min_{\beta}
+\left\{
+\ell(\beta)+\lambda \|D\beta\|_1
+\right\},
+\]
+where $\ell(\beta)$ is a convex loss function, such as the squared-error loss
+\[
+\ell(\beta)=\frac{1}{2}\|y-X\beta\|_2^2.
+\]
+When $D$ is chosen as the first-difference matrix
+\[
+D=
+\begin{pmatrix}
+-1 & 1 & 0 & \cdots & 0\\
+0 & -1 & 1 & \cdots & 0\\
+\vdots & \vdots & \vdots & \ddots & \vdots\\
+0 & 0 & 0 & \cdots & 1
+\end{pmatrix},
+\]
+the generalized lasso reduces to the fused lasso. More generally, this extension allows fusion and total variation regularization to be imposed on arbitrary graph structures rather than only on ordered sequences, thereby providing a flexible mechanism for incorporating known adjacency relations or network topology directly into the estimation procedure. Their contribution also established a dual path algorithm and an unbiased estimator of degrees of freedom, thereby strengthening the theoretical and computational foundations of structured $\ell_1$ regularization.
+
+Related developments further clarified the statistical properties of graph-based fusion methods. Sharpnack, Singh, and Rinaldo (2012), for example, studied the edge lasso on general graphs, where the $\ell_1$ norm of coefficient differences across graph edges is penalized in order to recover piecewise constant signals over graph domains. Let $G=(V,E)$ be a graph with vertex set $V$ and edge set $E$. Then the graph-based fusion penalty can be expressed as
+\[
+\sum_{(u,v)\in E} |\beta_u-\beta_v|
+\;=\;
+\|D_G \beta\|_1,
+\]
+where $D_G$ is the incidence matrix of the graph. Their analysis showed that, under suitable graph-structured assumptions, sparsistency and support recovery can be achieved, thereby providing theoretical justification for interpreting local constancy as a manifestation of correlation structure.
+
+Extending these ideas beyond piecewise constant estimation, Wang, Sharpnack, Smola, and Tibshirani (2016) developed graph trend filtering, which generalized univariate trend filtering to graph settings by penalizing higher-order graph differences. A representative form of the estimator is
+\[
+\hat{\beta}^{\text{GTF}}
+=
+\arg\min_{\beta}
+\left\{
+\frac{1}{2}\|y-\beta\|_2^2
++
+\lambda \|\Delta^{(k+1)}_G \beta\|_1
+\right\},
+\]
+where $\Delta^{(k+1)}_G$ denotes a higher-order graph difference operator. This approach produces locally adaptive estimators that smooth over correlated regions while preserving sharp transitions, and is particularly attractive for nonparametric regression and denoising problems defined on irregular spatial or network domains.
+
+Taken together, these studies demonstrate that fusion, total variation, and generalized lasso methods provide a coherent framework for handling highly correlated predictors when the correlation structure is structured by ordering, adjacency, or network relations. These methods improve interpretability and statistical stability by explicitly regularizing differences among structurally related coefficients.
+
+\subsubsection{Graph-Based Regularization Tailored to Highly Correlated Designs}
+
+A more recent strand of the literature has considered regression settings in which predictor dependence is so strong that classical assumptions, such as restricted eigenvalue or related compatibility conditions, are no longer realistic. Consider the linear regression model
+\[
+y = X\beta + \varepsilon,
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n \times p}$ is the design matrix, and $\beta \in \mathbb{R}^p$ is the regression coefficient vector. Within this context, Li, Mark, Raskutti, Willett, Song, and Neiman (2020) developed a graph-based regularization framework specifically designed for highly correlated designs by assuming that predictor covariance and regression coefficient similarity are governed by a common graph structure. In their formulation, a covariance graph is constructed using either empirical covariances or external side information, and graph total variation regularization is imposed to encourage similar regression coefficients among strongly connected or highly correlated features. Specifically, letting $\widehat{\Sigma}$ denote an estimate of the predictor covariance matrix, they define a weighted edge-incidence operator $\Gamma$ based on the covariance graph, and consider an estimator of the form
+\[
+\hat{\beta}
+=
+\arg\min_{\beta}
+\left\{
+\frac{1}{n}\|y-X\beta\|_2^2
++
+\lambda_S \|\Gamma \beta\|_2^2
++
+\lambda_1\left(
+\lambda_{TV}\|\Gamma \beta\|_1
++
+\|\beta\|_1
+\right)
+\right\}.
+\]
+Here, the graph total variation term $\|\Gamma\beta\|_1$ promotes similarity among coefficients associated with strongly connected predictors, while the quadratic term $\|\Gamma\beta\|_2^2$ acts as a graph-based smoothing or Laplacian penalty that helps stabilize estimation when the design is highly ill-conditioned. The additional $\|\beta\|_1$ term retains elementwise sparsity. In particular, for an edge $(j,k)$ in the covariance graph, the corresponding row of $\Gamma$ is constructed as
+\[
+|\widehat{\Sigma}_{jk}|^{1/2}
+\bigl(
+e_j-\operatorname{sign}(\widehat{\Sigma}_{jk})e_k
+\bigr)^\top,
+\]
+so that
+\[
+\|\Gamma\beta\|_1
+=
+\sum_{(j,k)\in E}
+|\widehat{\Sigma}_{jk}|^{1/2}
+\left|
+\beta_j-\operatorname{sign}(\widehat{\Sigma}_{jk})\beta_k
+\right|,
+\]
+and
+\[
+\|\Gamma\beta\|_2^2
+=
+\sum_{(j,k)\in E}
+|\widehat{\Sigma}_{jk}|
+\left(
+\beta_j-\operatorname{sign}(\widehat{\Sigma}_{jk})\beta_k
+\right)^2.
+\]
+These expressions make explicit how the method encourages neighboring predictors in the graph to have comparable effects on the response. In particular, positively correlated predictors are encouraged to have similar coefficients, whereas negatively correlated predictors are encouraged to have coefficients with opposite signs. This approach is therefore tailored to situations in which neighboring predictors in the graph are expected to have comparable effects on the response, an assumption referred to as alignment between the covariance graph and the coefficient structure.
+
+Under this setting, the method departs from traditional sparsity-based analyses and instead derives finite-sample mean-squared error guarantees directly in terms of graph properties, thereby providing theoretical support even when conventional high-dimensional design assumptions fail. The study further establishes optimality claims for several graph families under the stated alignment assumptions and demonstrates the practical utility of the method through both simulation studies and an application to biochemistry data. Consequently, this work represents an important development in the literature on high-dimensional regression with highly correlated predictors, as it shows that graph-based structural regularization can yield both interpretable coefficient estimates and rigorous performance guarantees in regimes where standard penalized regression methods may be unstable or theoretically difficult to justify.
+
+\subsubsection{Bayesian Shrinkage Baselines for Correlated Predictors}
+
+Within the Bayesian literature, shrinkage priors have provided an important baseline framework for handling high-dimensional regression problems with correlated predictors by reducing overfitting and mitigating the instability of variable selection through continuous regularization. Consider the standard Bayesian linear regression model
+\[
+y = X\beta + \varepsilon,
+\qquad
+\varepsilon \sim N(0,\sigma^2 I_n),
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n\times p}$ is the design matrix, and $\beta=(\beta_1,\ldots,\beta_p)^\top$ is the regression coefficient vector. A particularly influential contribution is the horseshoe prior proposed by Carvalho, Polson, and Scott (2010), which represents a canonical global-local shrinkage formulation combining a sharp concentration near zero with heavy tails, thereby allowing strong shrinkage of negligible coefficients while preserving signals of substantial magnitude. Under the horseshoe prior, the coefficient-specific hierarchy is commonly written as
+\[
+\beta_j \mid \lambda_j,\tau,\sigma^2 \sim N(0,\sigma^2\tau^2\lambda_j^2),
+\qquad j=1,\ldots,p,
+\]
+\[
+\lambda_j \sim C^+(0,1),
+\qquad
+\tau \sim C^+(0,1),
+\]
+where $\lambda_j$ is a local shrinkage parameter and $\tau$ is a global shrinkage parameter, with $C^+(0,1)$ denoting the standard half-Cauchy distribution. This specification implies that most coefficients are heavily shrunk toward zero through the global-local scale $\tau\lambda_j$, while a small number of important signals may escape excessive shrinkage due to the heavy tails of the prior. Although the horseshoe prior does not explicitly impose grouping or structural dependence among predictors, it can nonetheless improve estimation stability under collinearity by adaptively shrinking regression effects according to their relative importance. This flexibility has made it an important reference point in sparse regression and signal estimation.
+
+Building on this idea, Xu, Schmid, Makalic, Qian, and Hopper (2016) extended the horseshoe framework to grouped predictors through the grouped horseshoe prior, in which shrinkage is introduced at both the group level and the within-group level. Suppose that the predictors are partitioned into $G$ groups, and let $\beta_{gj}$ denote the coefficient for variable $j$ in group $g$. A representative grouped horseshoe specification can be written as
+\[
+\beta_{gj}\mid \lambda_{gj},\delta_g,\tau,\sigma^2
+\sim
+N(0,\sigma^2\tau^2\delta_g^2\lambda_{gj}^2),
+\]
+\[
+\lambda_{gj}\sim C^+(0,1),
+\qquad
+\delta_g\sim C^+(0,1),
+\qquad
+\tau\sim C^+(0,1),
+\]
+where $\lambda_{gj}$ controls variable-specific local shrinkage within group $g$, $\delta_g$ controls group-level shrinkage, and $\tau$ is a global shrinkage parameter shared across all groups. Such a hierarchical specification is particularly useful when correlated predictors are naturally organized into meaningful blocks, as in additive models or basis expansion settings, because it allows shared regularization within groups while retaining the ability to distinguish individual effects inside each group. Accordingly, the grouped horseshoe may be viewed as a Bayesian response to correlation structures that are aligned with known predictor groupings, offering a more structured alternative to the original horseshoe prior.
+
+Taken together, these developments illustrate that Bayesian shrinkage methods address correlated high-dimensional regression primarily through adaptive continuous shrinkage and, when appropriate structural information is available, through hierarchical grouping mechanisms that enhance interpretability and stabilize inference.
+
+\subsubsection{Stability and Inference Under Strong Correlation}
+
+In high-dimensional regression with strongly correlated predictors, an important methodological concern extends beyond estimation accuracy to the stability of variable selection and the validity of subsequent statistical inference. Consider the standard linear regression model
+\[
+y = X\beta + \varepsilon,
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n\times p}$ is the design matrix, and $\beta \in \mathbb{R}^p$ is the regression coefficient vector. To address the instability induced by correlation, Meinshausen and B\"uhlmann (2010) proposed stability selection, which combines subsampling with a base selection procedure, such as the lasso or elastic net, and identifies relevant variables according to their selection frequencies across resampled data sets. Let $\hat{S}^{(b)}$ denote the set of variables selected by the base procedure on the $b$th subsample, $b=1,\ldots,B$. Then the empirical selection probability for variable $j$ is defined as
+\[
+\hat{\Pi}_j
+=
+\frac{1}{B}\sum_{b=1}^B I\bigl(j \in \hat{S}^{(b)}\bigr),
+\]
+and the final stable set is typically chosen as
+\[
+\hat{S}_{\mathrm{stable}}
+=
+\left\{
+j:\hat{\Pi}_j \ge \pi_{\mathrm{thr}}
+\right\},
+\]
+where $\pi_{\mathrm{thr}}$ is a pre-specified threshold. This approach was designed to improve robustness in settings where correlated predictors may lead to highly variable model selection results, and it also provides theoretical bounds on the expected number of false selections under appropriate choices of tuning parameters.
+
+Shah and Samworth (2013) further strengthened this framework by introducing complementary pairs stability selection, which refines the resampling scheme and establishes sharper nonasymptotic error bounds without relying on strong assumptions regarding the underlying model or the base selection method. In this setting, each resampling step uses a complementary pair of subsamples, say $A_b$ and $A_b^c$, and a representative selection frequency can be written as
+\[
+\hat{\Pi}^{\mathrm{CPSS}}_j
+=
+\frac{1}{2B}
+\sum_{b=1}^B
+\left[
+I\bigl(j \in \hat{S}(A_b)\bigr)
++
+I\bigl(j \in \hat{S}(A_b^c)\bigr)
+\right].
+\]
+Variables with large complementary-pairs selection probabilities are then retained, thereby improving the reproducibility of selected features under strong predictor dependence.
+
+While stability selection addresses the reproducibility of selected variables, another major direction has focused on valid inference after regularized estimation. In this regard, van de Geer, B\"uhlmann, Ritov, and Dezeure (2014) developed debiased or desparsified estimators for low-dimensional parameters in high-dimensional models, thereby enabling asymptotically normal inference, confidence intervals, and hypothesis tests even under correlated Gaussian, sub-Gaussian, or bounded designs. Starting from a regularized estimator such as the lasso, $\hat{\beta}^{\mathrm{lasso}}$, a representative debiased estimator for coefficient $j$ takes the form
+\[
+\tilde{\beta}_j
+=
+\hat{\beta}^{\mathrm{lasso}}_j
++
+\frac{1}{n}\hat{\theta}_j^{\top}X^{\top}\bigl(y-X\hat{\beta}^{\mathrm{lasso}}\bigr),
+\]
+where $\hat{\theta}_j$ is an estimated score or precision-direction vector used to remove the first-order bias introduced by penalization. Under suitable regularity conditions, this corrected estimator satisfies an asymptotic normality result of the form
+\[
+\frac{\sqrt{n}\,(\tilde{\beta}_j-\beta_j)}{\hat{\sigma}_j}
+\;\overset{d}{\longrightarrow}\;
+N(0,1),
+\]
+which provides the basis for confidence intervals and hypothesis tests. Their work provides an important theoretical foundation for post-selection inference in both linear models and generalized linear models with convex loss functions.
+
+A related development that explicitly exploits feature dependence is the knockoff framework of Barber and Cand\`es (2015), which constructs synthetic variables that replicate the dependence structure of the original predictors and then compares each original variable with its knockoff counterpart. In the fixed-design setting, the knockoff matrix $\tilde{X}$ is constructed so that
+\[
+\tilde{X}^{\top}\tilde{X}=X^{\top}X,
+\qquad
+X^{\top}\tilde{X}=X^{\top}X-\operatorname{diag}(s),
+\]
+for a suitable nonnegative vector $s$, thereby ensuring that the knockoff variables mimic the correlation structure of the original predictors. After fitting a lasso-type procedure to the augmented design $[X\ \tilde{X}]$, one may define feature statistics such as
+\[
+W_j
+=
+|\hat{\beta}_j|-|\hat{\beta}_{j+p}|,
+\]
+where $\hat{\beta}_j$ and $\hat{\beta}_{j+p}$ denote the fitted coefficients for the original variable and its knockoff counterpart, respectively. Variables are then selected according to
+\[
+\hat{S}_{\mathrm{KO}}
+=
+\{j: W_j \ge T\},
+\]
+where $T$ is a data-dependent threshold chosen to control the false discovery rate. This construction allows variable selection procedures based on lasso-type statistics to achieve finite-sample false discovery rate control while accounting directly for correlation among predictors.
+
+Taken together, these contributions demonstrate that, under strong predictor dependence, modern high-dimensional regression methodology must address not only shrinkage and selection but also the reproducibility of selected features and the validity of inferential conclusions, and that resampling-based stability methods, debiasing techniques, and knockoff constructions provide three influential and complementary solutions to these challenges.
+
+\subsection{Graph Laplacian Used in Regression}
+Graph Laplacian regression intorduces a predictor graph and uses the Laplacian to encourage coefficient smoothness on that graph. Frequentist approaches typically combine $\ell_1$ sparsity with a Laplacian quadratic form $\beta^\top L \beta$; Bayesian approaches encode $L$ as a prior precision (or build thresholded variants to induce selection).
+
+Given a weighted graph over predictors, the Laplacian $L$ yields $\beta^\top L \beta = \Sum_{(u,v)\in E} w_{uv}(\beta_u-\beta_v)^2$ (up to normalization), penalizing differences across connected predictors. If edges connect highly correlated variables or scientifically linked features, Laplacian smoothing preduces a structured grouping effect aligned with correlation. A central risk is oversmoothing bias (especially when neighboring effects differ in sign), motivating sign-adaptive constructions and combinations with nonconvex sparsity.
+
+
+\subsubsection{Frequentist Laplacian penalties: network-constrained regression and GRACE}
+
+Li and Li (2008) introduced one of the earliest regression frameworks to incorporate graph-structured prior information through a Laplacian-based penalty, proposing a network-constrained regularization method that combines sparsity with smoothness over a known biological network. Consider the standard linear regression model
+\[
+y = X\beta + \varepsilon,
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n\times p}$ is the design matrix, and $\beta \in \mathbb{R}^p$ is the regression coefficient vector. Let the underlying graph be denoted by $G=(V,E,W)$, where $V$ is the set of predictors, $E$ is the set of edges, and $w(u,v)$ is the weight for edge $(u,v)$. If $d_u=\sum_{v:u\sim v} w(u,v)$ denotes the degree of node $u$, then the normalized graph Laplacian can be written as
+\[
+L(u,v)=
+\begin{cases}
+1-\dfrac{w(u,v)}{d_u}, & u=v,\ d_u\neq 0,\\[6pt]
+-\dfrac{w(u,v)}{\sqrt{d_ud_v}}, & u\sim v,\\[6pt]
+0, & \text{otherwise}.
+\end{cases}
+\]
+In this approach, the regression coefficients are estimated under a penalty structure that not only encourages variable selection but also promotes similarity among coefficients corresponding to neighboring genes or predictors on the network. Specifically, Li and Li (2008) considered the criterion
+\[
+\hat{\beta}
+=
+\arg\min_{\beta}
+\left\{
+\|y-X\beta\|_2^2
++
+\lambda_1 \|\beta\|_1
++
+\lambda_2 \beta^\top L \beta
+\right\},
+\]
+where the $\ell_1$ term encourages sparsity and the quadratic Laplacian term induces smoothness over the network. Because
+\[
+\beta^\top L\beta
+=
+\sum_{u\sim v}
+w(u,v)
+\left(
+\frac{\beta_u}{\sqrt{d_u}}
+-
+\frac{\beta_v}{\sqrt{d_v}}
+\right)^2,
+\]
+the penalty directly shrinks the scaled coefficients of adjacent nodes toward one another. This formulation is particularly useful when neighboring predictors are expected to have similar effects, since it allows the regression model to reflect underlying biological pathway structure and improves interpretability in high-dimensional genomic applications. This work demonstrated that network information can be directly embedded into the estimation procedure, making it possible to identify not only individual relevant predictors but also functionally related subnetworks.
+
+Building on this idea, Li and Li (2010) further developed the GRACE framework for regression with graph-structured covariates, in which an $\ell_1$ penalty is combined with a Laplacian quadratic penalty to achieve simultaneous sparsity and graph-aware smoothing. A representative GRACE estimator may be written as
+\[
+\hat{\beta}^{\mathrm{GRACE}}
+=
+\arg\min_{\beta}
+\left\{
+\frac{1}{2n}\|y-X\beta\|_2^2
++
+\lambda_1 \|\beta\|_1
++
+\lambda_2 \beta^\top L \beta
+\right\},
+\]
+where $L$ is the graph Laplacian matrix associated with the known predictor network. In contrast to conventional sparsity-based methods that treat predictors independently, GRACE explicitly exploits known relationships among predictors so that coefficients associated with adjacent nodes in the graph are encouraged to be similar, thereby stabilizing estimation when the graph structure aligns with the correlation pattern among covariates. To address situations in which neighboring predictors may have regression effects of opposite signs, the authors also proposed the adaptive variant aGRACE, which modifies the graph-smoothing term using sign information from an initial estimator and thereby mitigates the oversmoothing problem that may arise under standard Laplacian regularization.
+
+In addition to methodological development, this study established estimation and model selection consistency under suitable regularity conditions, thereby providing a stronger theoretical foundation for graph-constrained regression in both fixed and diverging dimensional settings. Taken together, these studies constitute a foundational line of research in frequentist Laplacian regularization, showing that graph-based penalties can effectively integrate structural information into regression analysis and improve variable selection and coefficient estimation in applications involving networked or biologically connected predictors.
+
+
+\subsubsection{Nonconvex Sparsity + Laplacian Smoothing: SLS}
+
+Huang, Ma, Li, and Zhang (2011) proposed the sparse Laplacian shrinkage (SLS) estimator as a regression framework that integrates sparsity induction with graph-based coefficient smoothing for high-dimensional settings. Consider the standard linear regression model
+\[
+y = X\beta + \varepsilon,
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n\times p}$ is the design matrix, and $\beta \in \mathbb{R}^p$ is the regression coefficient vector. Specifically, the method combines the minimax concave penalty (MCP), which is designed to reduce the estimation bias commonly associated with convex penalties while promoting sparse variable selection, with a Laplacian quadratic penalty that encourages similar regression coefficients for predictors connected through a graph representing correlation patterns or structural relationships among covariates. The SLS estimator can be written as
+\[
+\hat{\beta}^{\mathrm{SLS}}
+=
+\arg\min_{\beta}
+\left\{
+\frac{1}{2n}\|y-X\beta\|_2^2
++
+\sum_{j=1}^p \rho\bigl(|\beta_j|;\lambda_1,\gamma\bigr)
++
+\frac{\lambda_2}{2}\beta^\top L\beta
+\right\},
+\]
+where $\rho(\cdot;\lambda_1,\gamma)$ denotes the MCP, $\lambda_1>0$ controls sparsity, $\lambda_2>0$ controls graph smoothing, and $L$ is the graph Laplacian matrix associated with the predictor network. A common form of the MCP is
+\[
+\rho(t;\lambda_1,\gamma)
+=
+\lambda_1 \int_0^t \left(1-\frac{x}{\gamma\lambda_1}\right)_+ dx,
+\qquad t\ge 0,
+\]
+where $\gamma>1$ is a shape parameter and $(a)_+ = \max(a,0)$. Equivalently, its derivative is
+\[
+\rho'(t;\lambda_1,\gamma)
+=
+\lambda_1\left(1-\frac{t}{\gamma\lambda_1}\right)_+,
+\qquad t\ge 0,
+\]
+which shows that the penalty behaves like an $\ell_1$ penalty near zero but applies less shrinkage to large coefficients, thereby reducing estimation bias relative to convex penalties.
+
+The Laplacian quadratic term can be expressed as
+\[
+\beta^\top L\beta
+=
+\sum_{j<k} a_{jk}(\beta_j-\beta_k)^2,
+\]
+or, more generally, in weighted form according to the graph structure. Thus, the Laplacian component encourages coefficients of connected predictors to be similar, stabilizing estimation by borrowing structural information across related variables. Through this construction, SLS is able to address correlated predictors in a more flexible manner than purely sparsity-based procedures, since the Laplacian component stabilizes estimation by borrowing structural information across related variables, whereas the MCP component improves support recovery by alleviating excessive shrinkage of large coefficients.
+
+From a theoretical perspective, the study established a generalized grouping property and showed that, under suitable regularity conditions in sparse high-dimensional regimes with $p \gg n$, the SLS estimator enjoys the oracle property, in the sense that it achieves selection consistency and is asymptotically equivalent, with high probability, to an oracle Laplacian shrinkage estimator constructed with knowledge of the true support. Consequently, this work represents an important development in the literature on graph-regularized high-dimensional regression, as it demonstrates that the combination of nonconvex sparsity and Laplacian smoothing can simultaneously improve variable selection accuracy, reduce bias, and exploit correlation structure among predictors.
+
+
+
+
+\subsubsection{Bayesian Laplacian Priors and Thresholded Variants}
+
+Within the Bayesian literature, graph Laplacian priors have provided a principled framework for incorporating structural dependence among predictors into high-dimensional regression models. Consider the standard Bayesian regression model
+\[
+y = X\beta + \varepsilon,
+\qquad
+\varepsilon \sim N(0,\sigma^2 I_n),
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n\times p}$ is the design matrix, and $\beta \in \mathbb{R}^p$ is the regression coefficient vector. Liu, Chakraborty, Li, Liu, and Lozano (2014) proposed Bayesian regularization via graph Laplacian, in which dependence among regression coefficients is modeled directly through a graph Laplacian matrix in the prior precision structure. A representative form of such a prior can be written as
+\[
+\beta \mid \sigma^2,\tau^2,L
+\sim
+N\!\left(0,\sigma^2\tau^2 (L+\xi I_p)^{-1}\right),
+\]
+where $L$ is a graph Laplacian matrix associated with the predictor network and $\xi>0$ is a small regularization constant ensuring positive definiteness. Equivalently, the prior density may be expressed as
+\[
+\pi(\beta \mid \sigma^2,\tau^2,L)
+\propto
+\exp\!\left\{
+-\frac{1}{2\sigma^2\tau^2}\beta^\top (L+\xi I_p)\beta
+\right\}.
+\]
+This formulation induces structured shrinkage by allowing prior dependence among coefficients associated with related predictors, thereby extending conventional Bayesian shrinkage methods to settings where network or graph information is available. Since
+\[
+\beta^\top L \beta
+=
+\sum_{(j,k)\in E} w_{jk}(\beta_j-\beta_k)^2,
+\]
+the graph Laplacian component encourages neighboring coefficients to be similar, while the diagonal component provides overall shrinkage and numerical stability.
+
+Building on this perspective, Chakraborty and Lozano (2019) developed a graph Laplacian prior for Bayesian variable selection and grouping, with the specific aim of simultaneously performing coefficient shrinkage, variable selection, and the identification of predictive clusters. In this setting, a representative prior specification may be written hierarchically as
+\[
+\beta \mid \Lambda,\sigma^2 \sim N(0,\sigma^2\Lambda^{-1}),
+\]
+where the precision matrix $\Lambda$ is constructed so that its off-diagonal entries encode graph-based relationships and its diagonal entries control shrinkage and positive definiteness. Such a formulation allows coefficients corresponding to connected predictors to borrow strength from one another while also supporting sparse estimation and cluster formation. By coupling coefficients through a Laplacian-based prior, the method is particularly suited to problems in which correlated predictors are expected to have similar regression effects, thereby promoting coefficient similarity while retaining a Bayesian mechanism for sparse model selection.
+
+A further refinement was introduced by Cai, Kang, and Yu (2020), who proposed the thresholded graph Laplacian Gaussian prior for network marker selection in generalized linear models. In this approach, the graph Laplacian component captures the global dependence structure among neighboring markers, whereas an additional thresholding mechanism induces sparsity and reconciles the competing goals of smoothing and variable selection. Specifically, letting $L$ denote the normalized graph Laplacian matrix, they consider the decomposition
+\[
+\beta = \alpha \circ t_{\lambda}(\gamma),
+\]
+where $\circ$ denotes elementwise multiplication and
+\[
+t_{\lambda}(\gamma)
+=
+\bigl(I(|\gamma_1|>\lambda),\ldots,I(|\gamma_p|>\lambda)\bigr)^\top.
+\]
+The latent vectors are assigned Gaussian priors of the form
+\[
+\gamma \sim N\!\left(0,\sigma_\gamma^2 (L+\varepsilon I_p)^{-1}\right),
+\qquad
+\alpha \sim N(0,\sigma_\alpha^2 I_p),
+\]
+with $\varepsilon>0$ included to ensure invertibility. Under this formulation, $\gamma$ controls network-structured selection through the thresholding rule, while $\alpha$ controls effect sizes for the selected predictors. Thus, the graph Laplacian induces dependence across neighboring markers, whereas the thresholding operator yields explicit sparsity in $\beta$. Their method was accompanied by posterior consistency results under regimes with diverging network size, thereby providing a stronger theoretical justification for Bayesian graph-based regularization in high-dimensional settings.
+
+Taken together, these studies demonstrate that Bayesian Laplacian priors offer a flexible and coherent approach to regression with network-structured or highly correlated predictors by embedding graph dependence directly into the prior distribution and, in more recent developments, combining such dependence modeling with explicit mechanisms for sparse selection and grouping.
+
+\subsection{TPBN/TPB Shrinkage Priors and Structured Bayesian Regression Under Correlation}
+The acronym \textbf{TPBN} is ambiguous in general usage. Follow the \textbf{primary definition in Armagan et al.\ (2011)}: the \textbf{TPB normal scale mixture} yields a marginal distribution denoted \textbf{TPBN$(a,b,\phi)$} (Three-Parameter Beta Normal), which provides a large family of global--local shrinkage priors.
+
+
+\subsubsection{TPBN Definition and Unification via TPB Mixing}
+
+Armagan, Dunson, and Clyde (2011) introduced the TPBN prior within the broader framework of generalized beta mixtures of Gaussians, providing a unified Bayesian shrinkage construction for high-dimensional regression. Consider the standard Bayesian linear regression model
+\[
+y = X\beta + \varepsilon,
+\qquad
+\varepsilon \sim N(0,\sigma^2 I_n),
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n\times p}$ is the design matrix, and $\beta=(\beta_1,\ldots,\beta_p)^\top$ is the regression coefficient vector. Their formulation is based on assigning a three-parameter beta (TPB) distribution to a latent shrinkage coefficient $\rho_j$, whose density is given by
+\[
+f(\rho_j;a,b,\phi)
+=
+\frac{\Gamma(a+b)}{\Gamma(a)\Gamma(b)}
+\phi^{\,b}
+\rho_j^{\,b-1}
+(1-\rho_j)^{a-1}
+\{1+(\phi-1)\rho_j\}^{-(a+b)},
+\qquad 0<\rho_j<1,
+\]
+where $a>0$, $b>0$, and $\phi>0$. This distribution is denoted by
+\[
+\rho_j \sim \mathrm{TPB}(a,b,\phi).
+\]
+The TPBN prior is then obtained by mixing a normal distribution over its scale through $\rho_j$, namely
+\[
+\beta_j \mid \rho_j,\sigma^2
+\sim
+N\!\left(0,\sigma^2\left(\rho_j^{-1}-1\right)\right),
+\qquad
+\rho_j \sim \mathrm{TPB}(a,b,\phi),
+\]
+and the resulting marginal prior on $\beta_j$ is referred to as
+\[
+\beta_j \sim \mathrm{TPBN}(a,b,\phi).
+\]
+This representation is important because it places a wide class of continuous shrinkage priors under a common hierarchical framework, thereby clarifying the relationships among existing Bayesian regularization methods and offering a flexible basis for further methodological development. In particular, smaller values of $a$ lead to a prior that is more concentrated near zero, whereas smaller values of $b$ produce heavier tails; the global parameter $\phi$ controls the overall degree of shrinkage.
+
+An important feature of this construction is that it admits equivalent hierarchical representations. In particular, if
+\[
+\beta_j \sim \mathrm{TPBN}(a,b,\phi),
+\]
+then an equivalent hierarchy is
+\[
+\beta_j \mid \tau_j,\sigma^2 \sim N(0,\sigma^2\tau_j),
+\qquad
+\tau_j \mid \lambda_j \sim \mathrm{Gamma}(a,\lambda_j),
+\qquad
+\lambda_j \sim \mathrm{Gamma}(b,\phi),
+\]
+where $\phi$ acts as a global shrinkage parameter. Equivalently, the local variance component satisfies
+\[
+\frac{\tau_j}{\phi} \sim \beta'(a,b),
+\]
+where $\beta'(a,b)$ denotes the inverted-beta distribution. This equivalence is central to the TPBN framework because it unifies several previously proposed shrinkage priors through a common mixing mechanism and also leads to convenient conjugate computations in linear models.
+
+In its original form, the TPBN prior is specified componentwise and therefore does not directly encode dependence among predictors; however, it provides a fundamental shrinkage backbone upon which later correlation-aware extensions, such as grouped or graph-structured priors, can be constructed. In addition to its distributional unification, the study also emphasized the computational advantages of the TPBN framework, including scalable approximate inference strategies such as variational Bayes, which make it particularly suitable for massive regression problems. Consequently, this work occupies a central position in the literature on Bayesian shrinkage priors, both as a formal definition of the TPBN family and as a general framework for understanding and extending continuous shrinkage methods in high-dimensional regression.
+
+
+\subsubsection{Canonical Global-Local Priors (Horseshoe and Variants)}
+
+Within the landscape of Bayesian global-local shrinkage priors, the horseshoe prior has emerged as one of the most influential formulations and may be regarded as a canonical representative of the broader TPBN-like family of continuous shrinkage models. Consider the standard Bayesian linear regression model
+\[
+y = X\beta + \varepsilon,
+\qquad
+\varepsilon \sim N(0,\sigma^2 I_n),
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n\times p}$ is the design matrix, and $\beta=(\beta_1,\ldots,\beta_p)^\top$ is the regression coefficient vector. As introduced by Carvalho, Polson, and Scott (2010), the horseshoe prior combines a global shrinkage parameter with local coefficient-specific scales, thereby allowing negligible effects to be strongly shrunk toward zero while preserving substantial signals through its heavy-tailed behavior. A standard hierarchical representation is
+\[
+\beta_j \mid \lambda_j,\tau,\sigma^2 \sim N(0,\sigma^2\tau^2\lambda_j^2),
+\qquad j=1,\ldots,p,
+\]
+\[
+\lambda_j \sim C^+(0,1),
+\qquad
+\tau \sim C^+(0,1),
+\]
+where $\lambda_j$ is a local shrinkage parameter and $\tau$ is a global shrinkage parameter. This property has made the horseshoe prior particularly attractive for sparse high-dimensional regression and signal estimation.
+
+An equivalent and often useful way to understand the amount of shrinkage is through the shrinkage factor
+\[
+\kappa_j
+=
+\frac{1}{1+n\sigma^{-2}\tau^2\lambda_j^2},
+\]
+so that $1-\kappa_j$ can be interpreted as the extent to which coefficient $\beta_j$ escapes complete shrinkage toward zero. Small signals tend to have $\kappa_j$ close to $1$, whereas important signals tend to have $\kappa_j$ closer to $0$.
+
+Building on this framework, Bhadra, Datta, Polson, and Willard (2017) proposed the horseshoe+ prior, which introduces an additional hierarchical shrinkage layer in order to improve the separation between signal and noise in ultra-sparse settings. A representative hierarchical form is
+\[
+\beta_j \mid \lambda_j,\eta_j,\tau,\sigma^2
+\sim
+N(0,\sigma^2\tau^2\lambda_j^2\eta_j^2),
+\]
+\[
+\lambda_j \sim C^+(0,1),
+\qquad
+\eta_j \sim C^+(0,1),
+\qquad
+\tau \sim C^+(0,1).
+\]
+Thus, relative to the original horseshoe prior, horseshoe+ adds an extra local half-Cauchy mixing variable $\eta_j$, which yields a sharper spike near zero and heavier tails. Although neither the horseshoe nor the horseshoe+ prior explicitly encodes correlation structure among predictors in their baseline forms, both methods can nevertheless enhance stability under correlated designs through adaptive continuous shrinkage, and they have served as important foundations for later structured extensions.
+
+An additional practical issue within this class of priors concerns the specification of the global shrinkage parameter $\tau$, whose prior distribution can substantially influence posterior regularization behavior. In this regard, Piironen and Vehtari (2017) provided a systematic analysis of hyperprior choice for $\tau$, establishing an interpretable relationship between the global shrinkage level and the effective number of nonzero coefficients in the model. Specifically, they define the effective number of nonzero coefficients as
+\[
+m_{\mathrm{eff}}
+=
+\sum_{j=1}^D (1-\kappa_j),
+\]
+and show that
+\[
+E(m_{\mathrm{eff}}\mid \tau,\sigma)
+=
+\frac{\sigma^{-1}\tau\sqrt{n}}{1+\sigma^{-1}\tau\sqrt{n}}\,D.
+\]
+If $p_0$ denotes a prior guess for the number of relevant predictors, this leads to the reference value
+\[
+\tau_0
+=
+\frac{p_0}{D-p_0}\frac{\sigma}{\sqrt{n}},
+\]
+which provides a principled way to calibrate the prior on $\tau$ according to prior beliefs about sparsity. Their work offered principled guidance for selecting hyperpriors based on prior beliefs about sparsity, thereby improving the robustness and practical calibration of horseshoe-based inference.
+
+Taken together, these studies illustrate that horseshoe-type priors constitute a central component of the modern Bayesian shrinkage literature, not only because of their theoretical and empirical effectiveness in sparse regression, but also because of their role in motivating subsequent extensions for more complex high-dimensional settings.
+
+
+\subsubsection{Theory: Posterior Consistency and Uncertainty Quantification}
+
+From a theoretical perspective, an important strand of the TPBN and broader Bayesian shrinkage literature has focused on establishing the validity of posterior inference in high-dimensional settings. Consider the standard linear regression model
+\[
+y = X\beta_0 + \varepsilon,
+\qquad
+\varepsilon \sim N(0,\sigma^2 I_n),
+\]
+where $\beta_0 \in \mathbb{R}^p$ denotes the true regression coefficient vector. Armagan, Dunson, Lee, Bajwa, and Strawn (2013) investigated posterior consistency in linear regression models under shrinkage priors when the number of predictors grows with the sample size, providing sufficient conditions under which the posterior distribution concentrates around the true regression coefficients under sparsity assumptions. A representative expression of posterior consistency is
+\[
+\Pi_n\!\left(
+\beta:\|\beta-\beta_0\|_2>\varepsilon
+\,\middle|\,
+y
+\right)
+\longrightarrow 0
+\qquad \text{as } n\to\infty,
+\]
+for every $\varepsilon>0$, where $\Pi_n(\cdot\mid y)$ denotes the posterior distribution. Their results offered a fundamental theoretical justification for the use of continuous shrinkage priors in large-$p$ regression, demonstrating that such priors can retain desirable asymptotic behavior beyond conventional low-dimensional settings, with the role of predictor correlation entering through the design conditions required for posterior concentration.
+
+A related but distinct theoretical concern is uncertainty quantification under global-local shrinkage priors. In this regard, van der Pas, Szab\'o, and van der Vaart (2017) studied credible sets and marginal credible intervals for the horseshoe prior in sparse normal means models, with particular attention to the frequentist coverage properties of Bayesian uncertainty statements. In the sparse normal means setting,
+\[
+Y_i=\theta_i+\varepsilon_i,
+\qquad
+\varepsilon_i \sim N(0,1),
+\qquad i=1,\ldots,n,
+\]
+and the horseshoe prior is imposed on the coordinates $\theta_i$. A $(1-\alpha)$ posterior credible ball centered at a posterior location estimator $\hat{\theta}$ can be written as
+\[
+C_\alpha(Y)
+=
+\left\{
+\theta:\|\theta-\hat{\theta}\|_2 \le r_\alpha(Y)
+\right\},
+\]
+where the radius $r_\alpha(Y)$ is chosen so that
+\[
+\Pi\!\left(
+\theta:\|\theta-\hat{\theta}\|_2 \le r_\alpha(Y)
+\,\middle|\,
+Y
+\right)
+=
+1-\alpha.
+\]
+Similarly, a marginal $(1-\alpha)$ credible interval for coordinate $\theta_i$ may be written in posterior-quantile form as
+\[
+I_i(Y)
+=
+\bigl[
+q_{i,\alpha/2}(Y),\, q_{i,1-\alpha/2}(Y)
+\bigr],
+\]
+where $q_{i,\alpha/2}(Y)$ and $q_{i,1-\alpha/2}(Y)$ denote the corresponding posterior quantiles of $\theta_i$. Their analysis clarified the circumstances under which horseshoe-based credible regions can achieve appropriate coverage and near-optimal size, while also showing that adaptive credible sets cannot be uniformly honest over the full parameter space. These findings are important because they reveal both the strengths and limitations of Bayesian shrinkage priors for uncertainty quantification, especially in sparse high-dimensional problems where shrinkage may induce overconfidence in certain regimes.
+
+Taken together, these studies provide an essential theoretical foundation for the TPBN-related literature by showing that continuous shrinkage priors are theoretically meaningful both in terms of posterior concentration and in terms of the behavior of Bayesian uncertainty quantification.
+
+\subsubsection{Structured Extensions for Correlated Predictors: Groups and Graphs}
+
+Within the development of structured Bayesian shrinkage for correlated predictors, several extensions have expanded the global-local prior framework beyond componentwise regularization toward formulations that can better accommodate group and graph dependence. Consider the standard Bayesian linear regression model
+\[
+y = X\beta + \varepsilon,
+\qquad
+\varepsilon \sim N(0,\sigma^2 I_n),
+\]
+where $y \in \mathbb{R}^n$ is the response vector, $X \in \mathbb{R}^{n\times p}$ is the design matrix, and $\beta \in \mathbb{R}^p$ is the regression coefficient vector. One important example is the grouped horseshoe prior of Xu et al.\ (2016), which extends the original horseshoe by introducing hierarchical shrinkage at both the group level and the within-group level, thereby allowing predictors that belong to the same structural block to share a common degree of regularization while preserving local adaptivity for individual coefficients. If predictor $j$ belongs to group $g$, a representative grouped horseshoe hierarchy can be written as
+\[
+\beta_{gj}\mid \lambda_{gj},\delta_g,\tau,\sigma^2
+\sim
+N(0,\sigma^2\tau^2\delta_g^2\lambda_{gj}^2),
+\]
+\[
+\lambda_{gj}\sim C^+(0,1),
+\qquad
+\delta_g\sim C^+(0,1),
+\qquad
+\tau\sim C^+(0,1),
+\]
+where $\lambda_{gj}$ is a local shrinkage parameter, $\delta_g$ is a group-level shrinkage parameter, and $\tau$ is a global shrinkage parameter. This type of extension is particularly relevant when predictor correlation is aligned with known groupings, such as additive components or basis expansions.
+
+In a related direction, Armagan, Dunson, and Lee (2013) proposed the generalized double Pareto (GDP) shrinkage prior, which provides a heavy-tailed alternative to other global-local priors by bringing Laplace-like concentration near zero and Student-$t$-like tail behavior. The GDP density for a coefficient $\beta_j$ may be written as
+\[
+\pi(\beta_j\mid \xi,\alpha)
+=
+\frac{1}{2\xi}
+\left(
+1+\frac{|\beta_j|}{\alpha \xi}
+\right)^{-(\alpha+1)},
+\qquad \xi>0,\ \alpha>0,
+\]
+and it admits the scale-mixture representation
+\[
+\beta_j\mid \tau_j,\sigma^2 \sim N(0,\sigma^2\tau_j),
+\qquad
+\tau_j\mid \lambda_j \sim \mathrm{Exp}\!\left(\frac{\lambda_j^2}{2}\right),
+\qquad
+\lambda_j \sim \mathrm{Ga}(\alpha,\eta),
+\]
+with $\xi=\eta/\alpha$. Although the GDP prior is typically specified componentwise, it is important in the broader literature because it offers sparse estimation with reduced bias for large coefficients and thus complements TPBN and horseshoe-type priors as a flexible shrinkage family for high-dimensional regression.
+
+Polson and Scott (2012) further contributed to this line of work by developing a L\'evy-process perspective on local shrinkage rules, thereby clarifying the conceptual relationship between Bayesian prior constructions and frequentist penalty functions in regularized regression. In a generic local-scale mixture formulation,
+\[
+\beta_j \mid \tau_j \sim N(0,\tau_j),
+\qquad
+\tau_j \sim p(\tau_j),
+\]
+which induces the marginal prior
+\[
+p(\beta_j)=\int_0^\infty N(\beta_j\mid 0,\tau_j)\,p(\tau_j)\,d\tau_j.
+\]
+The corresponding regularization penalty can then be expressed as
+\[
+m(\beta_j)=-\log p(\beta_j),
+\]
+showing how a shrinkage prior can be interpreted as a penalty function in penalized regression. Although explicit correlation modeling is not built into the baseline formulation, this perspective offers a general theoretical basis upon which structured extensions involving groups or graphs can be layered.
+
+More directly related to graph-structured dependence are Bayesian Laplacian-type priors such as BRGL and TGLG, which illustrate how structured dependence and sparsity may be combined within a unified Bayesian framework. In these models, the graph Laplacian is used in the prior precision structure to encode dependence among neighboring or correlated predictors. A representative BRGL-type prior may be written as
+\[
+\beta \mid \sigma^2,\tau^2,L
+\sim
+N\!\left(0,\sigma^2\tau^2(L+\xi I_p)^{-1}\right),
+\]
+where $L$ is a graph Laplacian matrix and $\xi>0$ ensures positive definiteness. Since
+\[
+\beta^\top L\beta
+=
+\sum_{(j,k)\in E} w_{jk}(\beta_j-\beta_k)^2,
+\]
+this prior encourages neighboring coefficients to be similar.
+
+A further refinement appears in the thresholded graph Laplacian Gaussian prior (TGLG), where sparsity is induced through an additional thresholding mechanism. A representative specification is
+\[
+\beta = \alpha \circ t_{\lambda}(\gamma),
+\]
+where $\circ$ denotes elementwise multiplication and
+\[
+t_{\lambda}(\gamma)
+=
+\bigl(I(|\gamma_1|>\lambda),\ldots,I(|\gamma_p|>\lambda)\bigr)^\top.
+\]
+The latent variables are assigned priors
+\[
+\gamma \sim N\!\left(0,\sigma_\gamma^2(L+\varepsilon I_p)^{-1}\right),
+\qquad
+\alpha \sim N(0,\sigma_\alpha^2 I_p),
+\]
+so that the graph Laplacian captures dependence among neighboring predictors while the thresholding operator yields explicit sparsity in $\beta$. These developments are particularly important because they show how TPBN-like shrinkage ideas can be extended beyond independent coefficient modeling to accommodate structural information among predictors, even when such methods are not explicitly formulated under the TPBN label.
+
+Collectively, this strand of research demonstrates that modern Bayesian shrinkage methodology has evolved from purely componentwise priors to increasingly structured formulations capable of integrating group information, graph dependence, and sparsity within a coherent hierarchical modeling framework.
+
+\subsection{Application and Foundation of LKJ/Onion Priors in Bayesian}
+
+$LKJ$ priors (from the Lewandowski-Kurowicka-Joe onion method) are now a standard flexible prior on correlation matrices in Bayesian regression. Let
+\[
+\Sigma = D R D,
+\qquad
+D=\mathrm{diag}(\sigma_1,\ldots,\sigma_K),
+\]
+where $R$ is a $K\times K$ correlation matrix and $D$ contains marginal scale parameters. This decomposition is important because it separates marginal variances from dependence structure. Lewandowski et al.\ (2009) introduced the onion/vine method for generating random correlation matrices, yielding the $LKJ$ prior, whose density for a correlation matrix $R$ is
+\[
+\pi(R\mid \eta)\propto \det(R)^{\eta-1},
+\qquad \eta>0.
+\]
+Stan's documentation explicitly recommends decomposing a covariance into scales and a correlation matrix and giving the latter an $LKJ(\eta)$ prior. In a hierarchical Bayesian regression setting, a typical prior specification may therefore be written as
+\[
+\beta_j \sim N(\mu,\Sigma),
+\qquad
+\Sigma = D R D,
+\qquad
+R \sim LKJ(\eta),
+\]
+or, equivalently, in Cholesky form,
+\[
+R = L_R L_R^\top,
+\qquad
+L_R \sim LKJ\text{-Cholesky}(\eta).
+\]
+In particular, Stan's user guide notes that choosing $\eta=1$ yields a uniform prior over correlation matrices, while $\eta>1$ concentrates density near the identity matrix and therefore favors weaker correlations. Thus, $LKJ$ has become a default weakly informative prior for correlation matrices in hierarchical modeling. Unlike the inverse-Wishart prior, $LKJ$ cleanly separates scales from correlation, which makes prior specification more interpretable and more flexible in regression models with structured covariance assumptions. Stan's functions reference also shows that
+\[
+LKJ(R\mid \eta)\propto \det(R)^{\eta-1},
+\]
+underscoring its role in Stan-based Bayesian regression.
+
+\subsubsection{Applications in Hierarchical and Mixed-Effects Models}
+In hierarchical or mixed models, $LKJ$ priors typically regularize the random-effect correlation matrix. For example, Brilleman et al.\ (2017) fit a Bayesian piecewise-linear mixed model (via Stan) by decomposing the random-effects covariance into standard deviations and a correlation matrix, then placing Stan's $LKJ_{corr}(\eta)$ prior on that correlation. They set $\eta$ implicitly to $1$, which is the default uniform prior, used half-Cauchy priors on the scales, and ran HMC in Stan. This approach matches Stan's recommended strategy. In general, analysts specify $\Omega = $Corr(random effects) with $\Omega \sim LKJ(\eta)$, $\eta$ often unspecified or set $\ge 1$ for weak informativeness. The result is a well-behaved posterior for group-level effects with interpretable shrinkage: higher $\eta$ yields less spurious correlation, and $\eta = 1$ yields no prior preference.
+
+\subsubsection{Applications in Covariance Regression Models}
+$LKJ$ priors are also used in covariance-regression settings. Seiler and Holmes (2017) modeled functional connectivity difference via a covariance regression; they parameterized each covariance term with its own correlation matrix and assigned each an $LKJ(\eta)$ prior. In practice they use $\eta = 1$ for each term and half-Cauchy on scales. Their model was implemented in Stan, via the CovRegFC R package, with Stan code made public. Similarly, Park (2024) proposed a "Covariate-assisted principal regression" for brain connectivity
+, decomposing covariance as $diag(\omega)\Omegadiag(\omega)$ and using $\omega\sim half-Cauchy, \Omega \sim LKJ(\eta)$. He allows $\eta > 0$ (shape parameter unspecified) and performs HMC via Stan. These examples show that $LKJ$ priors can flexibly regularize correlation structures in regression on covariance matrices.
+
+\subsubsection{Applications in Joint Models}
+In Bayesian joint models, $LKJ$ priors often regularize the random-effects correlation. Mauff et al.\ (2020) fitted a multivariate joint model with several biomarkers: they decompose the random-effects covariance and put an $LKJ(\zeta)$ prior on the correlation with $\zeta = 1.5$ and half-$t$ priors on the scales. Estimation was via a two-stage MCMC algorithm. Yu et al.\ (2024) built a joint model with threshold regression for biomarkers and menopause timing. They used Stan (rstan) with HMC: random-effects SDs had half-Cauchy priors, and the correlation matrix had an $LKJ(\eta)$ prior with $\eta = 1$. Finally, Palma et al.\ (2025) presented a Bayesian location-scale joint model. They similarly used half-$t$ priors on SDs and $LKJ(\eta)$ on the random-effects correlation. In all these joint-model examples, the $LKJ$ prior was placed on the correlation matrix $(\Omega)$ of random effects, providing interpretable shrinkage; typically $\eta$ is set to $1$ or a mild value.
+
+\subsubsection{Discussion}
+$LKJ$ priors are favored for their interpretability, but users note their behavor depends on dimension and $\eta$. Stan's guide observes that for high-dimensional $\Omega$, even a flat $LKJ(\eta = 1)$ yields marginal correlations concentrated near zero, so one may choose $\eta > 1$ for stronger shrinkage. Unlike inverse-Wishart, LKJ separates scale and correlation priors, which simplifies hyperparameter choice. However, some have reported that flat $LKJ$ priors can under-estimate true correlations in large models. Alternatives include hierarchical or factor priors on $\Omega$, but these are less common in applied regression. In practice, $LKJ(onion)$ priors serve as a default weakly-informative prior for correlations.
+
+\newpage
+\section{Methodology: TPBN-MBSP (TPBN II)}\label{sec:method}
+
+This chapter introduces the proposed TPBN II model, a Bayesian high-dimensional regression approach designed for settings where predictors are strongly correlated. The key motivation is that standard global--local shrinkage priors, while effective for inducing sparsity, may yield unstable coefficient patterns and degraded performance when signals are distributed across highly collinear predictors. TPBN II addresses this issue by injecting explicit dependence information among predictors into the prior for regression coefficients. Concretely, we construct a predictor graph from the empirical correlation structure of the design matrix and translate this graph into a Laplacian matrix. The Laplacian is then incorporated into the coefficient prior through a covariance-additive formulation, so that the posterior inference naturally encourages coherent behavior (smoothing and grouping) of coefficients within highly correlated feature blocks. Throughout this chapter, we describe the univariate response case for ease of presentation; the same construction can be extended to multivariate responses with appropriate matrix-normal formulations.
+
+\subsection{Model Setup and Notation}\label{subsec:notation}
+
+Let $y\in\mathbb{R}^n$ denote the response vector and $X\in\mathbb{R}^{n\times p}$ the design matrix with $p$ predictors. The regression coefficient vector is $\beta\in\mathbb{R}^p$, and the observation noise variance is $\sigma^2>0$. TPBN II follows the global--local shrinkage philosophy through a TPBN hierarchy, introducing local scale parameters $\psi=(\psi_1,\ldots,\psi_p)^\top$ and auxiliary rate variables $\zeta=(\zeta_1,\ldots,\zeta_p)^\top$. In addition, TPBN II assigns a correlation matrix $R_\beta\in\mathbb{R}^{p\times p}$ to capture residual dependence among coefficients, and it introduces a Laplacian matrix $L\in\mathbb{R}^{p\times p}$ constructed from the predictor graph. The Laplacian is treated as fixed once constructed, while $(\beta,\sigma^2,\psi,\zeta,R_\beta)$ are updated by MCMC. The hyperparameters include $(u,a)$ for TPBN, $\eta$ for the LKJ prior on $R_\beta$, and $(d,k)$ for the inverse-gamma prior on $\sigma^2$. The scalar $\phi>0$ controls the contribution of the Laplacian component; in this thesis it is treated as fixed and can be tuned in simulation studies. A small numerical jitter $\epsilon>0$ is used when necessary to ensure positive definiteness in covariance computations.
+
+\subsection{Graph Construction and Laplacian Matrix}\label{subsec:laplacian}
+
+The first step of TPBN II is to convert strong predictor correlation into a graph structure. We compute the sample correlation matrix $C=\mathrm{cor}(X)$ and apply a thresholding rule to retain only substantial correlations. Given a threshold $c\in(0,1)$ (e.g., $c=0.3$), we define a weighted adjacency matrix $W=(w_{jk})$ by setting $w_{jk}=|C_{jk}|\mathbf{1}(|C_{jk}|>c)$ for $j\neq k$ and $w_{jj}=0$. In this representation, predictors whose absolute correlation exceeds $c$ are connected by an edge whose weight equals the magnitude of the correlation. The corresponding degree matrix is $D_W=\mathrm{diag}(W\mathbf{1})$, where $\mathbf{1}$ denotes the all-ones vector. The (unnormalized) graph Laplacian is then defined as $L_0=D_W-W$.
+
+A standard identity illustrates the smoothing role of the Laplacian: for any vector $x\in\mathbb{R}^p$,
+\begin{equation}
+x^\top L_0 x=\frac12\sum_{j\ne k}w_{jk}(x_j-x_k)^2\ge 0,
+\label{eq: laplacian form}
+\end{equation}
+
+
+which implies that large edge weights penalize large differences between connected components. To make the Laplacian component comparable across different $p$, we adopt a trace normalization. If $\mathrm{tr}(L_0)>0$, we set $L=\frac{p}{\mathrm{tr}(L_0)}L_0$ so that $\mathrm{tr}(L)=p$; otherwise, we use $L=L_0$. This scaling allows the scalar $\phi$ in the prior to serve as an interpretable and dimension-stable control of the Laplacian strength.
+
+\subsection{Onion Method for Generating Correlation Matrices}
+
+In the proposed Bayesian regression framework, the correlation matrix 
+\(R_\beta\) is introduced to characterize the dependence structure among 
+regression coefficients. Since \(R_\beta\) must be a symmetric positive 
+definite correlation matrix, directly sampling each pairwise correlation 
+independently from \((-1,1)\) is not appropriate, because the resulting 
+matrix is not guaranteed to be positive definite. To address this issue, 
+the onion method provides a constructive approach for generating valid 
+correlation matrices by recursively increasing the dimension of the matrix.
+
+Let \(R_k\) be a \(k \times k\) positive definite correlation matrix. 
+When a new variable is added, the \((k+1)\times(k+1)\) correlation matrix 
+can be partitioned as
+\[
+R_{k+1}
+=
+\begin{pmatrix}
+R_k & z \\
+z^T & 1
+\end{pmatrix},
+\]
+where \(z\in\mathbb{R}^k\) is the vector of correlations between the new 
+variable and the existing \(k\) variables. By the Schur complement formula,
+\[
+\det(R_{k+1})
+=
+\det(R_k)\left(1-z^T R_k^{-1}z\right).
+\]
+Since \(R_k\) is already positive definite, the matrix \(R_{k+1}\) is 
+positive definite if and only if
+\[
+1-z^T R_k^{-1}z > 0,
+\]
+or equivalently,
+\[
+z^T R_k^{-1}z < 1.
+\]
+Therefore, the admissible region of \(z\) is an ellipsoid determined by 
+\(R_k^{-1}\). The key idea of the onion method is to sample \(z\) from this 
+ellipsoidal region so that positive definiteness is automatically preserved 
+at each recursive step.
+
+To construct such a vector \(z\), let \(A_k\) be a matrix satisfying
+\[
+A_k A_k^T = R_k.
+\]
+For example, \(A_k\) may be obtained from the Cholesky decomposition of 
+\(R_k\). Let
+\[
+z = A_k w,
+\]
+where \(w\in\mathbb{R}^k\) is sampled from the unit ball, satisfying
+\[
+w^T w < 1.
+\]
+Then
+\[
+z^T R_k^{-1}z
+=
+w^T A_k^T R_k^{-1} A_k w.
+\]
+Since \(R_k = A_k A_k^T\), it follows that
+\[
+z^T R_k^{-1}z
+=
+w^T w.
+\]
+Thus, if \(w^T w < 1\), then
+\[
+z^T R_k^{-1}z < 1,
+\]
+which guarantees that \(R_{k+1}\) remains positive definite.
+
+Lewandowski, Kurowicka, and Joe (2009) extended the onion method to generate 
+random correlation matrices with density
+\[
+p(R) \propto \det(R)^{\eta-1},
+\]
+where \(\eta>0\). This density corresponds to the LKJ prior for correlation 
+matrices. The parameter \(\eta\) controls the degree of concentration around 
+the identity matrix. In particular, when \(\eta=1\), the density becomes 
+uniform over the space of positive definite correlation matrices, whereas 
+larger values of \(\eta\) place more prior mass near the identity matrix.
+
+The extended onion method is based on an elliptically contoured distribution. 
+Consider a random vector \(W\in\mathbb{R}^k\) with density
+\[
+f_W(w)
+\propto
+\left(1-w^T w\right)^{\beta-1},
+\qquad w^T w \leq 1.
+\]
+This distribution can be generated by the stochastic representation
+\[
+W = \sqrt{Y}U,
+\]
+where
+\[
+Y \sim \mathrm{Beta}\left(\frac{k}{2},\beta\right),
+\]
+and \(U\) is uniformly distributed on the surface of the \(k\)-dimensional 
+unit sphere. In practice, \(U\) can be generated by drawing
+\[
+a_1,\ldots,a_k \overset{iid}{\sim} N(0,1),
+\]
+and setting
+\[
+U = \frac{a}{\|a\|}.
+\]
+Then \(W=\sqrt{Y}U\) satisfies \(W^T W=Y<1\), so it lies inside the 
+\(k\)-dimensional unit ball.
+
+By setting
+\[
+Z = A_k W,
+\]
+the distribution of \(Z\) conditional on \(R_k\) is supported on the 
+ellipsoidal region
+\[
+z^T R_k^{-1}z < 1.
+\]
+The density of \(Z\mid R_k\) is proportional to
+\[
+f(z\mid R_k)
+\propto
+\det(R_k)^{-1/2}
+\left(1-z^T R_k^{-1}z\right)^{\beta-1}.
+\]
+The term \(\det(R_k)^{-1/2}\) arises from the linear transformation 
+\(z=A_k w\), since \(|A_k|=\det(R_k)^{1/2}\).
+
+The recursive density argument explains why the onion method generates 
+a correlation matrix with the desired LKJ form. Suppose that \(R_k\) has 
+density
+\[
+p(R_k)
+\propto
+\det(R_k)^{\beta_k-1}.
+\]
+Combining this with the conditional density of \(Z\mid R_k\), the joint 
+density of \((R_k,Z)\), and hence of \(R_{k+1}\), is proportional to
+\[
+\det(R_k)^{\beta_k-1}
+\det(R_k)^{-1/2}
+\left(1-z^T R_k^{-1}z\right)^{\beta-1}.
+\]
+Therefore,
+\[
+p(R_{k+1})
+\propto
+\det(R_k)^{\beta_k-\frac{3}{2}}
+\left(1-z^T R_k^{-1}z\right)^{\beta-1}.
+\]
+Using
+\[
+\det(R_{k+1})
+=
+\det(R_k)\left(1-z^T R_k^{-1}z\right),
+\]
+we obtain the desired form
+\[
+p(R_{k+1})
+\propto
+\det(R_{k+1})^{\beta-1}
+\]
+when
+\[
+\beta_k-\frac{3}{2} = \beta-1.
+\]
+This gives
+\[
+\beta_k = \beta+\frac{1}{2}.
+\]
+Hence, at each step of the recursive construction, the shape parameter 
+\(\beta\) is decreased by \(1/2\). Starting from
+\[
+\beta = \eta + \frac{d-2}{2},
+\]
+and decreasing \(\beta\) by \(1/2\) at each expansion step ensures that 
+the final \(d\times d\) correlation matrix has density
+\[
+p(R) \propto \det(R)^{\eta-1}.
+\]
+
+The extended onion method can therefore be summarized as follows. First, 
+initialize
+\[
+\beta = \eta + \frac{d-2}{2},
+\]
+generate
+\[
+u \sim \mathrm{Beta}(\beta,\beta),
+\]
+and set
+\[
+r_{12}=2u-1.
+\]
+This gives the initial \(2\times2\) correlation matrix
+\[
+R_2 =
+\begin{pmatrix}
+1 & r_{12}\\
+r_{12} & 1
+\end{pmatrix}.
+\]
+Then, for \(k=2,\ldots,d-1\), update
+\[
+\beta \leftarrow \beta-\frac{1}{2},
+\]
+generate
+\[
+Y\sim \mathrm{Beta}\left(\frac{k}{2},\beta\right),
+\]
+generate a random direction \(U\) uniformly on the surface of the 
+\(k\)-dimensional unit sphere, and set
+\[
+W=\sqrt{Y}U.
+\]
+Given \(A_k A_k^T=R_k\), define
+\[
+z=A_k W.
+\]
+Finally, update the correlation matrix as
+\[
+R_{k+1}
+=
+\begin{pmatrix}
+R_k & z\\
+z^T & 1
+\end{pmatrix}.
+\]
+After the final iteration, the resulting matrix \(R_d\) is a valid 
+positive definite correlation matrix with density proportional to 
+\(\det(R_d)^{\eta-1}\).
+
+In the proposed TPBN II algorithm, this construction is used to generate 
+an independence proposal for the coefficient correlation matrix. Specifically, 
+at each MCMC iteration, a candidate matrix is generated as
+\[
+R_\beta^* \sim \mathrm{LKJ}(\eta),
+\]
+
+
+
+
+
+\subsection{Likelihood and Laplacian-Added Coefficient Prior}\label{subsec:model}
+
+We consider the Gaussian linear regression likelihood
+\begin{equation}
+y\mid \beta,\sigma^2 \sim N(X\beta,\sigma^2 I_n).
+\label{eq:lik_v2}
+\end{equation}
+The novelty of TPBN II lies in the coefficient prior. Define $D_\psi=\mathrm{diag}(\sqrt{\psi_1},\ldots,\sqrt{\psi_p})$ and introduce the coefficient covariance component
+\begin{equation}
+\Sigma_\beta = D_\psi R_\beta D_\psi + \phi L.
+\label{eq:sigbeta_v2}
+\end{equation}
+Conditional on $(\sigma^2,\psi,R_\beta)$, we assign the Gaussian prior
+\begin{equation}
+\beta\mid \sigma^2,\psi,R_\beta \sim N\big(0,\ \sigma^2\Sigma_\beta\big).
+\label{eq:beta_prior_v2}
+\end{equation}
+The term $D_\psi R_\beta D_\psi$ preserves the TPBN-driven local shrinkage mechanism: coefficients with small $\psi_j$ are strongly shrunk, enabling sparse learning when $p\gg n$. The additive term $\phi L$ injects graph-induced structure, encouraging coefficients associated with highly correlated predictors to behave coherently in the posterior. Importantly, because the Laplacian enters the covariance rather than being added as a penalty in the likelihood, it shapes the prior dependence in a positive-(semi)definite manner. When numerical stability requires strict positive definiteness, we replace $\Sigma_\beta$ by $\Sigma_\beta+\epsilon I_p$ with a small $\epsilon>0$.
+
+To complete the TPBN hierarchy, we use the gamma--gamma representation
+\begin{equation}
+\psi_j\mid \zeta_j \sim \mathrm{Gamma}(u,\zeta_j),\qquad 
+\zeta_j\sim \mathrm{Gamma}(a,\tau),\qquad j=1,\ldots,p,
+\label{eq:tpbn_v2}
+\end{equation}
+where $\mathrm{Gamma}(\text{shape},\text{rate})$ denotes the shape--rate parameterization. Following the scaling used in the baseline TPBN-MBSP implementation, the global scale is fixed at
+\begin{equation}
+\tau=\frac{1}{p\sqrt{n\log n}}.
+\label{eq:tau_v2}
+\end{equation}
+For the coefficient correlation matrix, we place an LKJ prior
+\begin{equation}
+R_\beta \sim \mathrm{LKJ}(\eta),
+\label{eq:lkj_v2}
+\end{equation}
+and for the noise variance we adopt
+\begin{equation}
+\sigma^2 \sim \mathrm{Inv\text{-}Gamma}\Big(\frac{d}{2},\frac{k}{2}\Big).
+\label{eq:sigma_v2}
+\end{equation}
+
+\subsection{Posterior Computation: Metropolis-within-Gibbs}\label{subsec:posterior}
+
+Posterior inference is performed by a Metropolis-within-Gibbs sampler. The Laplacian structure affects the sampler through $\Sigma_\beta$ in \eqref{eq:sigbeta_v2}; consequently, every step that depends on $\Sigma_\beta$ propagates the graph information throughout the chain.
+
+We begin with the conditional distribution of $\beta$. Combining \eqref{eq:lik_v2} and \eqref{eq:beta_prior_v2}, the kernel of $p(\beta\mid y,\sigma^2,\psi,R_\beta)$ is proportional to
+\[
+\exp\left\{-\frac{1}{2\sigma^2}(y-X\beta)^\top (y-X\beta)\right\}
+\exp\left\{-\frac{1}{2\sigma^2}\beta^\top\Sigma_\beta^{-1}\beta\right\}.
+\]
+Expanding $(y-X\beta)^\top(y-X\beta)=y^\top y-2\beta^\top X^\top y+\beta^\top X^\top X\beta$ and completing the square yields a Gaussian full conditional,
+\begin{equation}
+\beta\mid y,\sigma^2,\psi,R_\beta \sim N\big(m,\ V\big),
+V=\sigma^2\left(X^\top X+\Sigma_\beta^{-1}\right)^{-1},
+m=\left(X^\top X+\Sigma_\beta^{-1}\right)^{-1}X^\top y.
+\label{eq:beta_full_v2}
+\end{equation}
+This update highlights the role of the Laplacian: the matrix $\Sigma_\beta^{-1}$ depends on $L$, and hence the posterior mean and covariance of $\beta$ borrow information across correlated predictors as encoded by the graph.
+
+Next, the conditional distribution of $\sigma^2$ is inverse-gamma. Let $\mathrm{RSS}=(y-X\beta)^\top(y-X\beta)$ and $Q=\beta^\top\Sigma_\beta^{-1}\beta$. Combining the likelihood, the Gaussian prior for $\beta$, and the inverse-gamma prior for $\sigma^2$ gives
+\begin{equation}
+\sigma^2\mid y,\beta,\psi,R_\beta \sim 
+\mathrm{Inv\text{-}Gamma}\left(\frac{d+n+p}{2},\ \frac{k+\mathrm{RSS}+Q}{2}\right).
+\label{eq:sigma_full_v2}
+\end{equation}
+Again, the Laplacian enters through $Q$ via $\Sigma_\beta$.
+
+The local scales $\psi_j$ are updated via Metropolis--Hastings because $\Sigma_\beta$ couples $\psi$ nonlinearly through $D_\psi R_\beta D_\psi$. We use a log-scale random-walk proposal $\log\psi_j^\star=\log\psi_j+\varepsilon$ with $\varepsilon\sim N(0,s_j^2)$, and accept or reject based on the change in the Gaussian prior density of $\beta$ induced by $\Sigma_\beta(\psi,R_\beta)$ together with the gamma prior density of $\psi_j\mid\zeta_j$. The auxiliary variables $\zeta_j$ admit a conjugate update: from \eqref{eq:tpbn_v2} one obtains
+\begin{equation}
+\zeta_j\mid \psi_j \sim \mathrm{Gamma}(a+u,\ \tau+\psi_j),\qquad j=1,\ldots,p.
+\label{eq:zeta_full_v2}
+\end{equation}
+
+Finally, the coefficient correlation matrix $R_\beta$ is updated by Metropolis--Hastings. We generate an independence proposal $R_\beta^\star\sim \mathrm{LKJ}(\eta)$ using an onion-style constructive sampler that guarantees positive definiteness by design. Because the proposal distribution matches the prior, the LKJ terms cancel in the acceptance ratio, and the update depends only on the induced Gaussian prior density of $\beta$ through $\Sigma_\beta$,
+\begin{equation}
+\alpha=\min\left\{1,\ 
+\frac{p(\beta\mid\sigma^2,\psi,R_\beta^\star)}{p(\beta\mid\sigma^2,\psi,R_\beta)}
+\right\}.
+\label{eq:R_accept_v2}
+\end{equation}
+This strategy avoids the numerical difficulties and low acceptance rates often associated with random-walk proposals on the space of correlation matrices, especially in moderate to large dimensions.
+
+
+
+\subsection{Implementation Remarks}\label{subsec:implementation}
+
+In practice, the main numerical challenge is ensuring that $\Sigma_\beta$ is well-conditioned so that $\Sigma_\beta^{-1}$ and $\log|\Sigma_\beta|$ can be computed reliably. Since $L$ is positive semidefinite and $D_\psi R_\beta D_\psi$ can be close to singular under strong shrinkage, we add a small jitter $\epsilon I_p$ to $\Sigma_\beta$ when needed to guarantee strict positive definiteness. Moreover, all matrix inverses in \eqref{eq:beta_full_v2} are computed via linear solves (e.g., Cholesky factorization) rather than explicit inversion, which improves stability and efficiency. The step sizes $s_j$ in the MH updates for $\psi_j$ can be tuned through short pilot runs to achieve reasonable acceptance rates, while the onion-based independence proposal for $R_\beta$ typically yields stable sampling behavior by construction.
+
+\subsection{How Proposed Method Addresses Strong Predictor Correlation}\label{subsec:summary_method}
+
+Proposed method modifies TPBN-MBSP by augmenting the coefficient prior covariance with a graph Laplacian term, $\Sigma_\beta=D_\psi R_\beta D_\psi+\phi L$. The TPBN hierarchy maintains sparsity through local shrinkage, while the Laplacian component translates strong predictor correlation into coefficient-level coupling that promotes coherent posterior behavior within correlated predictor groups. Because $\Sigma_\beta$ enters the updates of $\beta$, $\sigma^2$, and the MH steps for both $\psi$ and $R_\beta$, the Laplacian structure is propagated throughout the full MCMC procedure, enabling the sampler to share information across correlated features rather than selecting arbitrary representatives. This mechanism is the principal reason TPBN II model is expected to exhibit improved stability and performance in regimes dominated by high predictor correlation.
+
+
+\subsection{Algorithm Summary}\label{subsec:algorithm}
+The complete posterior sampling procedure for our method is summarized below. The algorithm is implemented through a Metropolis-within-Gibbs sampler, where the graph Laplacian matrix is fixed before MCMC starts, and the model parameters are updated iteratively conditional on the current values of the remaining quantities.
+
+
+
+\begin{enumerate}
+\item \textbf{Step 0 (fixed graph construction).}
+Given the design matrix $X\in\mathbb{R}^{n\times p}$, compute the sample correlation matrix
+\[
+C=\mathrm{cor}(X)\in\mathbb{R}^{p\times p}.
+\]
+For a prespecified threshold $c>0$, define the weighted adjacency matrix $W=(w_{jk})$ by
+\[
+w_{jk}=|C_{jk}|\,\mathbf{1}(|C_{jk}|>c), \qquad w_{jj}=0.
+\]
+Then construct the degree matrix $D_W=\mathrm{diag}(W\mathbf{1})$ and the graph Laplacian
+\[
+L_0=D_W-W.
+\]
+If $\mathrm{tr}(L_0)>0$, rescale it as
+\[
+L=\frac{p}{\mathrm{tr}(L_0)}\,L_0.
+\]
+The matrix $L$ is fixed throughout the MCMC iterations.
+
+\item \textbf{Step 1 (model specification).}
+Consider the Gaussian linear regression model
+\[
+y\mid \beta,\sigma^2 \sim N(X\beta,\sigma^2 I_n),
+\]
+and assign the prior
+\[
+\beta\mid \sigma^2,\psi,R_\beta \sim N(0,\sigma^2\Sigma_\beta),
+\qquad
+\Sigma_\beta=D_\psi R_\beta D_\psi+\phi L,
+\]
+where
+\[
+D_\psi=\mathrm{diag}(\sqrt{\psi_1},\ldots,\sqrt{\psi_p}), \qquad \psi_j>0.
+\]
+For the TPBN hierarchy, assume
+\[
+\psi_j\mid \zeta_j \sim \mathrm{Gamma}(u,\zeta_j), \qquad
+\zeta_j \sim \mathrm{Gamma}(a,\tau), \qquad j=1,\ldots,p,
+\]
+with
+\[
+R_\beta \sim \mathrm{LKJ}(\eta),
+\qquad
+\sigma^2 \sim \mathrm{Inv\text{-}Gamma}\!\left(\frac d2,\frac k2\right).
+\]
+Here all Gamma distributions are under the shape--rate parameterization.
+
+\item \textbf{Step 2 (initialization).}
+Choose initial values
+\[
+\beta^{(0)},\quad \sigma^{2(0)}>0,\quad \psi^{(0)}_j>0,\quad \zeta^{(0)}_j>0,\quad
+R_\beta^{(0)},
+\]
+and precompute $X^\top X$ and $X^\top y$. The Laplacian matrix $L$ obtained in Step 0 remains fixed during the sampling procedure.
+
+\item \textbf{Step 3 (Metropolis-within-Gibbs sampling).}
+For $t=1,\ldots,T$, repeat the following updates.
+
+\begin{enumerate}
+\item \textbf{Update $\beta^{(t)}$ (Gibbs step).}
+
+First compute
+\[
+\Sigma_\beta^{(t-1)}
+=
+D_{\psi^{(t-1)}}\,R_\beta^{(t-1)}\,D_{\psi^{(t-1)}}+\phi L.
+\]
+If needed for numerical stability, replace $\Sigma_\beta^{(t-1)}$ by
+\[
+\Sigma_\beta^{(t-1)}+\epsilon I_p,
+\qquad \epsilon>0.
+\]
+Then sample
+\[
+\beta^{(t)}\mid y,\sigma^{2(t-1)},\psi^{(t-1)},R_\beta^{(t-1)}
+\sim N\!\bigl(m^{(t)},V^{(t)}\bigr),
+\]
+where
+\[
+V^{(t)}
+=
+\sigma^{2(t-1)}
+\left(
+X^\top X+\bigl(\Sigma_\beta^{(t-1)}\bigr)^{-1}
+\right)^{-1},
+\]
+and
+\[
+m^{(t)}
+=
+\left(
+X^\top X+\bigl(\Sigma_\beta^{(t-1)}\bigr)^{-1}
+\right)^{-1}X^\top y.
+\]
+
+\item \textbf{Update $\sigma^{2(t)}$ (Gibbs step).}
+
+Define
+\[
+\mathrm{RSS}^{(t)}=(y-X\beta^{(t)})^\top(y-X\beta^{(t)}),
+\qquad
+Q^{(t)}=(\beta^{(t)})^\top\bigl(\Sigma_\beta^{(t-1)}\bigr)^{-1}\beta^{(t)}.
+\]
+Then draw
+\[
+\sigma^{2(t)}\mid y,\beta^{(t)},\psi^{(t-1)},R_\beta^{(t-1)}
+\sim
+\mathrm{Inv\text{-}Gamma}
+\left(
+\frac{d+n+p}{2},
+\frac{k+\mathrm{RSS}^{(t)}+Q^{(t)}}{2}
+\right).
+\]
+
+\item \textbf{Update each $\psi_j^{(t)}$ (Metropolis--Hastings step).}
+
+For each $j=1,\ldots,p$, generate a log-scale random-walk proposal
+\[
+\log \psi_j^\star=\log \psi_j^{(t-1)}+\varepsilon_j,
+\qquad
+\varepsilon_j\sim N(0,s_{\psi_j}^2),
+\]
+and set $\psi_j^\star=\exp(\log\psi_j^\star)$. Let $\psi^\star$ be the same as $\psi^{(t-1)}$
+except that its $j$th entry is replaced by $\psi_j^\star$.
+The proposed value is accepted with probability
+\[
+\alpha_{\psi_j}
+=
+\min\left\{
+1,
+\frac{
+\pi(\psi_j^\star\mid\cdot)
+}{
+\pi(\psi_j^{(t-1)}\mid\cdot)
+}
+\right\},
+\]
+where the target kernel is proportional to
+\[
+\pi(\psi_j\mid\cdot)
+\propto
+p\!\left(\beta^{(t)}\mid \sigma^{2(t)},\psi,R_\beta^{(t-1)}\right)
+\,p\!\left(\psi_j\mid \zeta_j^{(t-1)}\right).
+\]
+Equivalently, the update may be implemented through the corresponding log-acceptance ratio including the Jacobian term from the log transformation.
+
+\item \textbf{Update each $\zeta_j^{(t)}$ (Gibbs step).}
+
+For each $j=1,\ldots,p$, sample
+\[
+\zeta_j^{(t)}\mid \psi_j^{(t)}
+\sim
+\mathrm{Gamma}\bigl(a+u,\tau+\psi_j^{(t)}\bigr).
+\]
+
+\item \textbf{Update $R_\beta^{(t)}$ (MH with LKJ/onion proposal).}
+
+Generate an independence proposal
+\[
+R_\beta^\star\sim \mathrm{LKJ}(\eta)
+\]
+using the onion method. Since the proposal distribution coincides with the prior, the prior term cancels in the Metropolis--Hastings ratio. Therefore, accept $R_\beta^\star$ with probability
+\[
+\alpha_R
+=
+\min\left\{
+1,
+\frac{
+p\!\left(\beta^{(t)}\mid \sigma^{2(t)},\psi^{(t)},R_\beta^\star\right)
+}{
+p\!\left(\beta^{(t)}\mid \sigma^{2(t)},\psi^{(t)},R_\beta^{(t-1)}\right)
+}
+\right\}.
+\]
+If accepted, set $R_\beta^{(t)}=R_\beta^\star$; otherwise set
+\[
+R_\beta^{(t)}=R_\beta^{(t-1)}.
+\]
+\end{enumerate}
+
+\item \textbf{Step 4 (posterior summary).}
+After discarding the first $B$ burn-in iterations, retain the samples
+\[
+\{\beta^{(t)}: t>B\}.
+\]
+The posterior mean estimator of $\beta$ is
+\[
+\hat\beta
+=
+\frac{1}{T-B}\sum_{t=B+1}^T \beta^{(t)}.
+\]
+Criteria like median and quantile are also available.\\
+If needed, one may also store
+\[
+V^{(t)}
+=
+\sigma^{2(t)}
+\left(
+X^\top X+\Sigma_\beta(\psi^{(t)},R_\beta^{(t)})^{-1}
+\right)^{-1}
+\]
+or its correlation version $\mathrm{cov2cor}(V^{(t)})$ for posterior correlation diagnostics.
+In simulation studies, the estimation accuracy may be assessed by
+\[
+\mathrm{MSE}
+=
+\frac{1}{p}\sum_{j=1}^p (\hat\beta_j-\beta_{\mathrm{true},j})^2.
+\]
+\end{enumerate}
+
+
+\section{Simulation Result and Data Analysis}
+
+\subsection{Simulation}
+The simulation study was divided into two parts based on different parameter settings. In both scenarios, the sample sized were set to $n=50$, with 100 replications conducted. For each replication, the last 1000 draws were retained, and the median of these draws was selected. That is, the final estimate of $\beta$ was computed as
+\[
+\hat{\beta}=\frac{1}{R}\sum_{j=1}^R \hat{\beta}_{median, j}
+\]
+For the estimation of the confidence intervals, the medians obtained from each replication were used to calculate the standard deviation, from which the intervals derived. and for the hyperparameter settings, we followed the recommended values in the literature review, setting $a=0.5, u=0.5, \tau = \frac{1}{p\times\sqrt{n\times \mathrm{log}n}}, \eta = 1, d = 1, \phi = 1, and\ k = \mathrm{var}(y-X\widehat{\beta}_{OLS})$.
+
+For the specification of the true values of $\beta$, two simulation scenarios were considered in order to examine the impact to different data structures, namely $p>n$ and $n>p$, on the estimation performance.
+
+In the $n>p$, phase 1 parameter settings, $\beta$ was specified as a 20-dimensional vector with
+\begin{multline}
+    X_{1}, X_{2}\sim N_2 \left(
+\begin{pmatrix}
+0 \\
+0
+\end{pmatrix},
+\begin{pmatrix}
+1 & r_1 \\
+r_1 & 1
+\end{pmatrix}
+\right),
+X_3, X_4, X_5\sim N_3 \left(
+\begin{pmatrix}
+0\\
+0\\
+0
+\end{pmatrix},
+\begin{pmatrix}
+1 & r_2 & r_2\\
+r_2 & 1 & r_2\\
+r_2 & r_2 & 1
+\end{pmatrix}
+\right),\\
+X_6, X_7\sim N_2 \left(
+\begin{pmatrix}
+    0\\
+    0
+\end{pmatrix},
+\begin{pmatrix}
+    1&0\\
+    0&1
+\end{pmatrix}
+\right),
+X_8, X_9, X_{10}, X_{11} \sim N_4 \left(
+\begin{pmatrix}
+    0\\0\\0\\0
+\end{pmatrix},
+\begin{pmatrix}
+    1 &r_3 & r_3 & r_3\\ r_3 & 1 & r_3 & r_3\\r_3 & r_3 & 1 & r_3\\r_3 & r_3 & r_3 & 1
+\end{pmatrix}
+\right),\\
+X_{12}, X_{13}, X_{14} \sim N_3 \left(
+\begin{pmatrix}
+    0\\0\\0
+\end{pmatrix},
+\begin{pmatrix}
+    1&r_4&r_4\\r_4&1&r_4\\r_4&r_4&1
+\end{pmatrix}
+\right),
+X_{15}, X_{16}, ..., X_{20} \sim N(0, 1)
+\end{multline}
+
+And in the $n<p$, phase 2 parameter settings, $\beta$ was specified as a 100-dimensional vector with
+\begin{multline}
+    X_{1}, X_{2}\sim N_2 \left(
+\begin{pmatrix}
+0 \\
+0
+\end{pmatrix},
+\begin{pmatrix}
+1 & r_1 \\
+r_1 & 1
+\end{pmatrix}
+\right),
+X_3, X_4, X_5\sim N_3 \left(
+\begin{pmatrix}
+0\\
+0\\
+0
+\end{pmatrix},
+\begin{pmatrix}
+1 & r_2 & r_2\\
+r_2 & 1 & r_2\\
+r_2 & r_2 & 1
+\end{pmatrix}
+\right),\\
+X_6, X_7\sim N_2 \left(
+\begin{pmatrix}
+    0\\
+    0
+\end{pmatrix},
+\begin{pmatrix}
+    1&0\\
+    0&1
+\end{pmatrix}
+\right),
+X_8, X_9, X_{10}, X_{11} \sim N_4 \left(
+\begin{pmatrix}
+    0\\0\\0\\0
+\end{pmatrix},
+\begin{pmatrix}
+    1 &r_3 & r_3 & r_3\\ r_3 & 1 & r_3 & r_3\\r_3 & r_3 & 1 & r_3\\r_3 & r_3 & r_3 & 1
+\end{pmatrix}
+\right),\\
+X_{12}, X_{13}, X_{14} \sim N_3 \left(
+\begin{pmatrix}
+    0\\0\\0
+\end{pmatrix},
+\begin{pmatrix}
+    1&r_4&r_4\\r_4&1&r_4\\r_4&r_4&1
+\end{pmatrix}
+\right),
+X_{15}, X_{16}, ..., X_{100} \sim N(0, 1)
+\end{multline}
+
+As for the design of $X$, the purpose is to examine whether the correlation structure has different effects on the model when the true values of $\beta$ are zero or nonzero. In addition, to investigate how different levels of correlation affect model performance, we consider four correlation settings, $r =( 0, 0.5, 0.9, 0.999)$, under $r_1=r_2=r_3=r_4$, and compare the results with the TPBN-MBSP model.
+
+The phase 1 simulation result shows at Table 1 and Table 2. When the correlation $r=0$, TPBN-MBSP can already estimate the nonzero coefficients accuracy and effectively shrink the zero coefficients. The proposed method still produces reasonable estimates, but it shows slightly larger variability for the zero coefficients, indicating that its stability is somewhat weaker than TPBN-MBSP in this setting. When the correlation $r = 0.5$, the proposed method and TPBN-MBSP perform similarly for nonzero coefficients indicating that the proposed method can still preserve the main signals. However, the proposed method has larger variability for zero coefficients, suggesting that its shrinkage effect is less stable than that of TPBN-MBSP. when the correlation increase to $r = 0.9$, TPBN-MBSP tends to over-shrink some highly correlated nonzero coefficients causing the estimates to deviate from the true values. In contract, the proposed method can better preserve the signals of correlated nonzero coefficients, especially for $X_3, X_4,$ and $X_5$. However, the proposed method also shows larger variability for zero coefficients, indicating that its shrinkage ability for noise variables is weaker than TPBN-MBSP. When the correlation becomes extremely high that $r=0.999$, both methods are affected. The main problem of TPBN-MBSP is over-shrinkage, where some truly nonzero coefficients are almost estimated as zero. The proposed method still has bias and larger variability, but it better preserves the signals of nonzero coefficients. Therefore, the proposed method has an advantage when dealing with highly correlated important predictors. Overall, when the correlation increases, TPBN-MBSP tends to over-shrink some nonzero coefficients, especially under $r=0.9$ and $r=0.999$. In contract, the proposed method is better able to preserve the signals of correlated nonzero coefficients, although it results in larger variability for some zero coefficients.
+
+
+
+\newpage
+\small
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\setlength{\tabcolsep}{1.5pt}
+\renewcommand{\arraystretch}{0.9}
+\begin{longtable}{@{}C{0.05\textwidth}*{4}{C{0.105\textwidth}}|*{4}{C{0.105\textwidth}}@{}}
+\hline
+\multicolumn{5}{c|}{correlation $(r_1, r_2, r_3, r_4) = (0, 0, 0, 0)$}
+&
+\multicolumn{4}{c}{correlation $(r_1, r_2, r_3, r_4) = (0.5, 0.5, 0.5, 0.5)$}
+\\
+\hline
+$\beta_{true}$
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN}
+& \multicolumn{2}{C{0.15\textwidth}|}{TPBN II}
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN}
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN II}
+\\
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+\\
+\hline
+1 & 0.94 & (0.188) & 0.89 & (0.245) & 0.93 & (0.240) & 0.92 & (0.196) \\
+2 & 1.97 & (0.188) & 1.96 & (0.195) & 1.99 & (0.205) & 2.00 & (0.191) \\
+-1 & -0.91 & (0.182) & -0.89 & (0.200) & -0.89 & (0.231) & -0.93 & (0.182) \\
+-1 & -0.92 & (0.172) & -0.91 & (0.202) & -0.96 & (0.253) & -0.98 & (0.193) \\
+2 & 1.98 & (0.175) & 1.98 & (0.190) & 1.88 & (0.214) & 1.89 & (0.196) \\
+3 & 2.97 & (0.158) & 2.95 & (0.170) & 2.97 & (0.156) & 2.96 & (0.158) \\
+-2 & -1.95 & (0.150) & -1.97 & (0.203) & -1.96 & (0.148) & -1.96 & (0.154) \\
+0 & 0.00 & (0.073) & -0.00 & (0.127) & 0.00 & (0.042) & -0.01 & (0.426) \\
+0 & -0.00 & (0.064) & -0.02 & (0.135) & 0.00 & (0.055) & -0.07 & (0.486) \\
+0 & -0.00 & (0.051) & -0.02 & (0.119) & 0.00 & (0.090) & 0.02 & (0.459) \\
+0 & -0.00 & (0.074) & -0.01 & (0.157) & -0.00 & (0.066) & 0.09 & (0.575) \\
+0 & -0.02 & (0.108) & -0.02 & (0.159) & -0.01 & (0.086) & 0.02 & (0.335) \\
+0 & 0.00 & (0.037) & -0.00 & (0.088) & -0.00 & (0.047) & 0.06 & (0.388) \\
+0 & 0.01 & (0.077) & 0.03 & (0.129) & 0.01 & (0.059) & -0.10 & (0.388) \\
+0 & -0.00 & (0.048) & -0.01 & (0.127) & -0.00 & (0.053) & -0.01 & (0.089) \\
+0 & 0.00 & (0.034) & 0.02 & (0.132) & 0.00 & (0.042) & 0.01 & (0.102) \\
+0 & 0.00 & (0.038) & -0.00 & (0.103) & 0.00 & (0.044) & -0.00 & (0.085) \\
+0 & 0.00 & (0.050) & -0.00 & (0.148) & -0.00 & (0.046) & -0.00 & (0.104) \\
+0 & -0.00 & (0.073) & 0.01 & (0.143) & -0.00 & (0.063) & 0.00 & (0.100) \\
+0 & -0.01 & (0.062) & -0.02 & (0.135) & -0.01 & (0.053) & -0.02 & (0.111) \\
+\hline
+
+\multicolumn{5}{c|}{correlation $(r_1, r_2, r_3, r_4) = (0.9, 0.9, 0.9, 0.9)$}
+&
+\multicolumn{4}{c}{correlation $(r_1, r_2, r_3, r_4) = (0.999, 0.999, 0.999, 0.999)$}
+\\
+\hline
+$\beta_{true}$
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN}
+& \multicolumn{2}{C{0.15\textwidth}|}{TPBN II}
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN}
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN II}
+\\
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+\\
+\hline
+1 & 0.79 & (0.555) & 0.91 & (0.445) & 1.35 & (1.171) & 1.02 & (1.315) \\
+2 & 2.14 & (0.524) & 2.04 & (0.411) & 1.59 & (1.163) & 1.94 & (1.261) \\
+-1 & -0.49 & (0.535) & -0.78 & (0.422) & -0.00 & (0.012) & -0.08 & (0.309) \\
+-1 & -0.57 & (0.553) & -0.88 & (0.358) & -0.00 & (0.021) & -0.12 & (0.302) \\
+2 & 1.18 & (0.679) & 1.69 & (0.351) & 0.00 & (0.016) & 0.20 & (0.298) \\
+3 & 2.97 & (0.171) & 2.97 & (0.163) & 2.99 & (0.150) & 2.98 & (0.153) \\
+-2 & -1.95 & (0.152) & -1.94 & (0.154) & -1.97 & (0.154) & -1.97 & (0.154) \\
+0 & 0.00 & (0.029) & -0.01 & (0.387) & 0.00 & (0.011) & -0.02 & (0.414) \\
+0 & -0.00 & (0.098) & 0.05 & (0.440) & -0.03 & (0.261) & -0.04 & (0.444) \\
+0 & 0.01 & (0.079) & 0.06 & (0.476) & 0.02 & (0.180) & 0.00 & (0.383) \\
+0 & -0.00 & (0.067) & -0.08 & (0.471) & 0.00 & (0.013) & 0.08 & (0.545) \\
+0 & -0.00 & (0.101) & -0.09 & (0.422) & -0.00 & (0.015) & 0.00 & (0.285) \\
+0 & -0.00 & (0.041) & -0.00 & (0.360) & 0.00 & (0.014) & 0.07 & (0.343) \\
+0 & 0.02 & (0.120) & 0.11 & (0.431) & -0.00 & (0.013) & -0.08 & (0.363) \\
+0 & 0.00 & (0.059) & -0.00 & (0.089) & -0.01 & (0.067) & -0.01 & (0.093) \\
+0 & 0.00 & (0.061) & 0.01 & (0.101) & 0.00 & (0.036) & 0.00 & (0.090) \\
+0 & 0.00 & (0.057) & -0.00 & (0.097) & 0.00 & (0.050) & 0.00 & (0.082) \\
+0 & -0.00 & (0.061) & -0.00 & (0.108) & 0.00 & (0.042) & 0.00 & (0.091) \\
+0 & -0.00 & (0.060) & 0.01 & (0.099) & -0.00 & (0.065) & 0.00 & (0.088) \\
+0 & -0.01 & (0.055) & -0.01 & (0.097) & -0.00 & (0.032) & -0.01 & (0.086) \\
+\hline
+\caption{Phase 1 simulation results comparing TPBN-MBSP and proposed method}
+\label{tab:phase1_compare_tpbn_proposed}
+\end{longtable}
+\normalsize
+
+
+
+
+
+
+
+
+The Phase 2 simulation result shows at Table 3 and Table 4. For the independent case, $r = 0$, TPBN-MBSP performs better than proposed method in estimating the truly nonzero coefficients $X_1\sim X_7$. The estimates from TPBN-MBSP are much closer to the true values, especially for $X_1\sim X_5$, whereas proposed method shows stronger shrinkage toward zero. This result is reasonable because when the predictors are independent, there is no correlation structure for proposed method to exploit. Since proposed method is designed to incorporate dependence information among regression coefficients through the modified covariance structure, this additional structure may become unnecessary or even slightly over-regularizing in the independent setting. For the moderate correlation case, $r=0.5$, TPBN-MBSP still gives more accurate estimates for the nonzero coefficients $X_1\sim X_7$. In particular, the estimates of $X_1, X_2, X_6$ and $X_7$ are very close to their true values under TPBN-MBSP. However, proposed method begins to show an advantage for the correlated null variables $X_8 \sim X_{14}$. These variables have true coefficients equal to zero but are generated with correlation structures. Compared with TPBN-MBSP, proposed method shrinks these correlated noise variables more strongly toward zero and produces smaller posterior standard deviations for this block. This suggests that when moderate correlation is present, proposed method is more conservative in preventing irrelevant but correlated predictors from begin falsely identified as important. For the high correlation case, $r=0.9$, the difference between the two methods becomes more apparent. TPBN-MBSP still performs better in estimating some individual nonzero coefficients. However, for the correlated group $X_3, X4, X_5$, whose true coefficients are $(-1, -1, 2)$, both methods are affected by the strong dependence among predictors. In this setting, proposed method shows its advantage mainly in controlling the estimates of the null correlated variables $X_8 \sim X_{14}$. The estimates from proposed method are close to zero and have smaller variation than those from TPBN-MBSP. This indicates that proposed method is more robust when highly correlated irrelevant predictors exist, even though it may introduce stronger shrinkage for some truly nonzero coefficients. For the extremely high correlation case, $r = 0.999$, proposed method has its clearest advantage. Under TPBN-MBSP, the estimates of the null variables $X_8 \sim X_{11}$ become unstable, and their posterior standard deviations are very large. For example, some zero coefficients are estimated far away from zero, which indicates that TPBN-MBSP is strongly affected by near-perfect multicollinearity. In contrast, proposed method successfully shrinks $X_8 \sim X_{14}$ close to zero and keeps their posterior standard deviations much smaller. Although both methods have difficulty recovering the individual coefficients of the highly correlated active group $X_3, X_4, X_5$, proposed method provides much more stable estimates for the correlated noise variables. Therefore, under extremely, strong correlation, proposed method is more reliable in reducing false signals and controlling posterior uncertainty. Overall, TPBN-MBSP performs better when the predictors are independent or only moderately correlated, especially for recovering the individual nonzero coefficients $X_1 \sim X_7$. However, as the correlation among predictors increases, proposed method becomes more advantageous. Its main strength is not necessarily improving the estimation of every individual nonzero, but rather stabilizing the estimation under correlation predictor structures. The results suggest that the proposed method is especially useful for high-dimensional regression with strong predictor correlation, where controlling false signals among correlated noise variables is an important issue.
+
+
+
+
+\small
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\setlength{\tabcolsep}{1.5pt}
+\renewcommand{\arraystretch}{0.9}
+\begin{longtable}{@{}C{0.05\textwidth}*{4}{C{0.105\textwidth}}|*{4}{C{0.105\textwidth}}@{}}
+\hline
+\multicolumn{5}{c|}{correlation $(r_1, r_2, r_3, r_4) = (0, 0, 0, 0)$}
+&
+\multicolumn{4}{c}{correlation $(r_1, r_2, r_3, r_4) = (0.5, 0.5, 0.5, 0.5)$}
+\\
+\hline
+$\beta_{true}$
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN}
+& \multicolumn{2}{C{0.15\textwidth}|}{TPBN II}
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN}
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN II}
+\\
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+\\
+\hline
+1 & 0.83 & (0.331) & 0.63 & (0.394) & 0.91 & (0.471) & 0.78 & (0.512) \\
+2 & 2.04 & (0.317) & 1.82 & (0.514) & 2.06 & (0.380) & 2.01 & (0.504) \\
+-1 & -0.90 & (0.309) & -0.57 & (0.378) & -0.87 & (0.406) & -0.55 & (0.299) \\
+-1 & -0.94 & (0.384) & -0.72 & (0.413) & -0.80 & (0.431) & -0.61 & (0.339) \\
+2 & 1.97 & (0.322) & 1.73 & (0.593) & 1.76 & (0.425) & 1.31 & (0.454) \\
+3 & 2.93 & (0.361) & 2.78 & (0.490) & 3.00 & (0.323) & 2.85 & (0.403) \\
+-2 & -2.02 & (0.220) & -1.93 & (0.472) & -2.05 & (0.234) & -1.98 & (0.398) \\
+0 & 0.00 & (0.146) & 0.05 & (0.232) & -0.03 & (0.238) & 0.01 & (0.079) \\
+0 & 0.03 & (0.240) & 0.02 & (0.182) & -0.05 & (0.228) & 0.01 & (0.064) \\
+0 & 0.02 & (0.222) & -0.01 & (0.167) & 0.03 & (0.208) & 0.00 & (0.081) \\
+0 & 0.00 & (0.130) & -0.02 & (0.136) & 0.04 & (0.177) & 0.01 & (0.071) \\
+0 & 0.01 & (0.298) & -0.02 & (0.160) & -0.01 & (0.132) & 0.02 & (0.102) \\
+0 & -0.01 & (0.147) & -0.02 & (0.152) & 0.01 & (0.153) & -0.01 & (0.109) \\
+0 & 0.00 & (0.182) & -0.02 & (0.157) & 0.03 & (0.164) & 0.01 & (0.081) \\
+0 & -0.01 & (0.146) & -0.02 & (0.152) & 0.00 & (0.160) & -0.01 & (0.120) \\
+0 & -0.02 & (0.122) & -0.02 & (0.182) & 0.01 & (0.189) & -0.02 & (0.131) \\
+0 & 0.02 & (0.114) & 0.01 & (0.178) & 0.01 & (0.179) & 0.01 & (0.150) \\
+0 & 0.06 & (0.189) & 0.02 & (0.193) & 0.01 & (0.141) & -0.02 & (0.150) \\
+0 & 0.01 & (0.112) & -0.03 & (0.117) & 0.00 & (0.207) & -0.02 & (0.164) \\
+0 & -0.01 & (0.141) & 0.02 & (0.131) & -0.01 & (0.115) & 0.02 & (0.126) \\
+\hline
+
+\multicolumn{5}{c|}{correlation $(r_1, r_2, r_3, r_4) = (0.9, 0.9, 0.9, 0.9)$}
+&
+\multicolumn{4}{c}{correlation $(r_1, r_2, r_3, r_4) = (0.999, 0.999, 0.999, 0.999)$}
+\\
+\hline
+$\beta_{true}$
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN}
+& \multicolumn{2}{C{0.15\textwidth}|}{TPBN II}
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN}
+& \multicolumn{2}{C{0.15\textwidth}}{TPBN II}
+\\
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+& $\widehat{\beta}$ & $\sigma_{\widehat{\beta}}$
+\\
+\hline
+1 & 0.81 & (0.912) & 0.97 & (1.098) & 1.24 & (1.514) & 1.38 & (1.443) \\
+2 & 2.17 & (0.882) & 1.95 & (1.101) & 1.78 & (1.538) & 1.62 & (1.459) \\
+-1 & -0.58 & (0.772) & -0.26 & (0.164) & 0.00 & (0.047) & -0.14 & (0.145) \\
+-1 & -0.48 & (0.593) & -0.20 & (0.192) & 0.00 & (0.057) & -0.13 & (0.147) \\
+2 & 1.13 & (0.912) & 0.44 & (0.189) & 0.01 & (0.039) & 0.26 & (0.195) \\
+3 & 2.95 & (0.349) & 2.90 & (0.320) & 2.99 & (0.292) & 2.93 & (0.305) \\
+-2 & -2.15 & (0.304) & -2.03 & (0.265) & -2.09 & (0.270) & -2.04 & (0.221) \\
+0 & 0.09 & (0.287) & 0.02 & (0.256) & 0.19 & (2.287) & 0.02 & (0.124) \\
+0 & 0.09 & (0.315) & 0.04 & (0.244) & 0.09 & (1.066) & 0.00 & (0.107) \\
+0 & -0.08 & (0.340) & -0.05 & (0.216) & -0.44 & (2.264) & -0.01 & (0.098) \\
+0 & -0.02 & (0.346) & 0.01 & (0.215) & 0.20 & (1.361) & 0.00 & (0.099) \\
+0 & -0.02 & (0.313) & -0.02 & (0.182) & 0.01 & (0.059) & 0.02 & (0.095) \\
+0 & 0.04 & (0.210) & 0.01 & (0.151) & 0.01 & (0.070) & 0.00 & (0.132) \\
+0 & -0.06 & (0.215) & -0.01 & (0.170) & 0.01 & (0.120) & 0.00 & (0.087) \\
+0 & -0.01 & (0.177) & 0.01 & (0.102) & -0.02 & (0.200) & -0.01 & (0.112) \\
+0 & -0.07 & (0.240) & 0.00 & (0.113) & -0.02 & (0.130) & -0.01 & (0.099) \\
+0 & 0.06 & (0.203) & 0.01 & (0.136) & 0.05 & (0.143) & 0.00 & (0.119) \\
+0 & 0.05 & (0.197) & -0.02 & (0.164) & 0.04 & (0.182) & -0.01 & (0.139) \\
+0 & -0.04 & (0.221) & -0.03 & (0.150) & -0.05 & (0.158) & -0.01 & (0.124) \\
+0 & -0.01 & (0.089) & 0.02 & (0.127) & 0.01 & (0.180) & 0.01 & (0.105) \\
+\hline
+\caption{Phase 2 simulation results comparing TPBN-MBSP and proposed method (only showed the first 20 predictors)}
+\label{tab:phase2_compare_tpbn_proposed}
+\end{longtable}
+
+
+\normalsize
+
+
+
+
+
+\section{Application to Real Data}
+In the real data, two real datasets are considered to evaluate the practical performance of the proposed method. The diamond price dataset has a relatively small number of parameters but contains stronger correlations among the explanatory variables. On the other hand, the house price dataset involves a larger number of predictors and is used to examine the performance of the proposed method in a higher-dimensional setting.
+
+\subsection{Diamond Price Data}
+The first real dataset used in this study is the Diamonds dataset from Kaggle. The response variable is \textbf{diamond price}, while the predictors include both numerical variables, such as \textbf{carat}, \textbf{depth}, \textbf{table}, \textbf{x}, \textbf{y}, and \textbf{z}, and categorical variables, such as \textbf{cut}, \textbf{color}, and \textbf{clarity}. The categorical variables are converted into dummy variables before model fitting. To evaluate the predictive performance of the two models, repeated train-test validation is conducted. In each repetition, 20\% of the observations are randomly selected as the training set, and the remaining 20\% are used as the test set. The performance measures include mean squared error (MSE), root mean squared error (RMSE), mean absolute error (MAE), and $R^2$.
+
+The prediction results show that both the original TPBN-MBSP model and the TPBN II model have strong predictive ability. The two models therefore achieve very similar predictive performance. Although the TPBN II model does not produce a lower test MSE than the original TPBN-MBSP model in this analysis, the difference between the two model is small. This suggests that the TPBN II model can incorporate a more complex prior covariance structure while still maintaining competitive predictive performance.
+
+The correlation matrix provides further insight into the structure of the data. The variable \textbf{carat} has the strongest marginal correlation with \textbf{price}, with a correlation of approximately 0.9216. The size-related variables \textbf{x}, \textbf{y}, and \textbf{z} are also highly correlated with \textbf{price}, with correlations of approximately 0.8844, 0.8654, and 0.8612, respectively. More importantly, these size-related predictors are highly correlated with each other. This indicates that the the data contain strong multicollinearity among the predictors related to diamond size.
+
+This high correlation structure provides a suitable setting for evaluating the TPBN II model. The original TPBN-MBSP model mainly controls shrinkage through independent local shrinkage parameters. In contrast, the TPBN II model incorporates predictor dependence by introducing a Laplacian-adjusted covariance structure in the prior distribution of the regression coefficients. Specifically, the prior covariance matrix is modified to include information from the correlation structure of the predictors. Therefore, the TPBN II model is expected to be more flexible in situations where predictors are strongly correlated.
+
+The posterior credible intervals also show that both models identify similar important predictors. On the standardized scale, \textbf{carat} is the dominant positive predictor in both models. The estimated coefficient of \textbf{carat} is approximately 1.3458 under the TPBN-MBSP model, with a 95\% credible interval of approximately $(1.3163, 1.3754)$. Under the TPBN II model, the estimated coefficient approximately 1.3468, with a 95\% credible interval of approximately $(1.3175, 1.3755)$. Since both credible intervals are entirely positive and very similar, the effect of \textbf{carat} on diamond price is stable across the teo methods.
+
+The categorical predictors also show interpretable patterns. The dummy variables corresponding to \textbf{clarity} mostly have positive effects, indicating that diamonds with better \textbf{clarity} levels tend to have higher prices relative to the reference \textbf{clarity} level. For example, \textbf{clarity} levels such as \textbf{IF}, \textbf{WS1}, \textbf{WS2}, \textbf{VS1}, and \textbf{VS2} all have positive estimated effects, and their credible intervals are clearly above zero. In contrast, the dummy variables corresponding to \textbf{color}, are mostly negative, especially for lower color grades such as \textbf{H}, \textbf{I}, and \textbf{J}. This indicates that, relative to the reference \textbf{color} level, these color grades are associated with lower prices. The \textbf{cut} dummy variables are generally positive, suggesting that better \textbf{cut} quality is associated with higher diamond prices.
+
+The variable selection results from repeated cross-validation further show that the two models select largely similar predictors. Both models consistency select important variables such as \textbf{carat}, most clarity dummy variables, several color dummy variables, and cut-related dummy variables. These variables have high selection rates, meaning that their 95\% credible intervals exclude zero in most or all cross-validation splits. This indicates that their effects are stable and not highly sensitive to the particular train-test split.
+
+However, the TPBN II model shows some advantages in terms of selection stability for several predictors. For example, the selection rate of \textbf{colorE} increases from 0.8 under the TPBN-MBSP model to 1.0 under the TPBN II model. Similarly, the selection rate of \textbf{cutGood} increases from 0.9 to 1.0, the selection rate of \textbf{table} increases from 0.7 to 0.9, and the selection rate of \textbf{y} increases from 0.5 to 0.7. These results suggest that the TPBN II model provides more stable variable selection for some predictors whose effects are relatively weak or sensitive to data splitting.
+
+The advantage of the TPBN II model is therefore not mainly reflected in a large reduction in prediction error. Instead, its main contribution is that it incorporates the dependence structure among predictors through the Laplacian-adjusted prior covariance while maintaining predictive performance comparable to that of the original TPBN-MBSP model. This is particularly meaningful for the diamond data, where several predictors, especially \textbf{carat}, \textbf{x}, \textbf{y}, and \textbf{z}, are highly correlated. By accounting for this correlation structure, the TPBN II model provides a more structurally flexible prior specification and improves the stability of variable selection for some predictors.
+
+In summary, both the TPBN-MBSP and the TPBN II model perform well in predicting diamond prices. The TPBN-MBSP model achieves a slightly lower test MSE in this analysis, but the difference between the two models is small. The TPBN II model remains competitive in terms of prediction accuracy and provides an additional advantage by incorporating predictor correlation information into the prior covariance structure. Under strong multicollinearity, this structural flexibility may lead to more stable coefficient estimation and variable selection. Therefore, the TPBN II model can be viewed as a useful extension of the original TPBN-MBSP framework for regression problems involving highly correlated predictors.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{c|ccccccc}
+\hline
+      & price   & carat  & depth   & table   & x       & y       & z      \\ \hline
+price & 1.0000  & 0.9235 & -0.0004 & 0.1219  & 0.8846  & 0.8859  & 0.8770 \\
+carat & 0.9235  & 1.0000 & 0.0346  & 0.1748  & 0.9753  & 0.9746  & 0.9708 \\
+depth & -0.0004 & 0.0346 & 1.0000  & -0.2898 & -0.0218 & -0.0238 & 0.1000 \\
+table & 0.1219  & 0.1748 & -0.2898 & 1.0000  & 0.1905  & 0.1848  & 0.1509 \\
+x     & 0.8846  & 0.9753 & -0.0218 & 0.1905  & 1.0000  & 0.9989  & 0.9878 \\
+y     & 0.8859  & 0.9746 & -0.0238 & 0.1848  & 0.9989  & 1.0000  & 0.9876 \\
+z     & 0.8770  & 0.9708 & 0.1000  & 0.1509  & 0.9878  & 0.9876  & 1.0000 \\ \hline
+\end{tabular}
+\label{diamond data correlation coefficient matrix}
+\caption{Diamond data correlation coefficient matrix}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ccccc}
+\hline
+predictor    & $\beta_{scaled\ median}$ & $95\%\ CI_{lower}$ & $95\%\ CI_{upper}$ & selected \\\hline
+carat        & 1.3703                     & 1.3457                  & 1.3952                  & TRUE           \\
+clarityIF    & 0.2103                     & 0.2008                  & 0.2205                  & TRUE           \\
+claritySI1   & 0.3532                     & 0.3329                  & 0.3739                  & TRUE           \\
+claritySI2   & 0.2182                     & 0.2004                  & 0.2369                  & TRUE           \\
+clarityVS1   & 0.3782                     & 0.3613                  & 0.3951                  & TRUE           \\
+clarityVS2   & 0.4061                     & 0.3865                  & 0.4278                  & TRUE           \\
+clarityVVS1  & 0.2833                     & 0.27                    & 0.2969                  & TRUE           \\
+clarityVVS2  & 0.3317                     & 0.3172                  & 0.3465                  & TRUE           \\
+colorE       & -0.018                     & -0.0258                 & -0.01                   & TRUE           \\
+colorF       & -0.0307                    & -0.0385                 & -0.023                  & TRUE           \\
+colorG       & -0.0485                    & -0.057                  & -0.0405                 & TRUE           \\
+colorH       & -0.0916                    & -0.0992                 & -0.084                  & TRUE           \\
+colorI       & -0.1127                    & -0.1199                 & -0.1058                 & TRUE           \\
+colorJ       & -0.1349                    & -0.1415                 & -0.1286                 & TRUE           \\
+cutGood      & 0.0416                     & 0.0294                  & 0.0534                  & TRUE           \\
+cutIdeal     & 0.1115                     & 0.0911                  & 0.1302                  & TRUE           \\
+cutPremium   & 0.0912                     & 0.0742                  & 0.1069                  & TRUE           \\
+cutVery Good & 0.0809                     & 0.0626                  & 0.0968                  & TRUE           \\
+depth        & -0.0014                    & -0.0112                 & 0.0027                  & FALSE          \\
+table        & -0.0118                    & -0.0196                 & -0.0042                 & TRUE           \\
+x            & -0.4453                    & -0.591                  & -0.2711                 & TRUE           \\
+y            & 0.2612                     & 0.0817                  & 0.4082                  & TRUE           \\
+z            & -0.143                     & -0.1889                 & -0.0789                 & TRUE           \\\hline
+\end{tabular}
+\caption{Predictors with selection with selection rate greater than or equal to 0.3 from the TPBN-MBSP method}
+\label{TPBN-MBSP's predictor estimation result}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ccccc}
+predictor    & $\beta_{scaled\ median}$   & $95\%\ CI_{lower}$   & $95\%\ CI_{upper}$   & selected  \\\hline
+carat        & 1.3717                     & 1.3454                  & 1.3966                  & TRUE           \\
+clarityIF    & 0.2094                     & 0.1995                  & 0.2202                  & TRUE           \\
+claritySI1   & 0.3513                     & 0.3314                  & 0.3744                  & TRUE           \\
+claritySI2   & 0.2167                     & 0.1986                  & 0.2364                  & TRUE           \\
+clarityVS1   & 0.3764                     & 0.3597                  & 0.396                   & TRUE           \\
+clarityVS2   & 0.4047                     & 0.3855                  & 0.4278                  & TRUE           \\
+clarityVVS1  & 0.2822                     & 0.2698                  & 0.2965                  & TRUE           \\
+clarityVVS2  & 0.3298                     & 0.3156                  & 0.3467                  & TRUE           \\
+colorE       & -0.0177                    & -0.025                  & -0.0107                 & TRUE           \\
+colorF       & -0.0306                    & -0.038                  & -0.023                  & TRUE           \\
+colorG       & -0.048                     & -0.0558                 & -0.0408                 & TRUE           \\
+colorH       & -0.0914                    & -0.0989                 & -0.0841                 & TRUE           \\
+colorI       & -0.1125                    & -0.1194                 & -0.1061                 & TRUE           \\
+colorJ       & -0.1346                    & -0.1405                 & -0.1288                 & TRUE           \\
+cutGood      & 0.042                      & 0.0305                  & 0.053                   & TRUE           \\
+cutIdeal     & 0.1103                     & 0.0907                  & 0.1269                  & TRUE           \\
+cutPremium   & 0.0917                     & 0.0761                  & 0.1076                  & TRUE           \\
+cutVery Good & 0.0808                     & 0.0645                  & 0.0954                  & TRUE           \\
+depth        & -0.0051                    & -0.0126                 & -0.0001                 & TRUE           \\
+table        & -0.0142                    & -0.0214                 & -0.0075                 & TRUE           \\
+x            & -0.4953                    & -0.6297                 & -0.3616                 & TRUE           \\
+y            & 0.3017                     & 0.1666                  & 0.43                    & TRUE           \\
+z            & -0.1337                    & -0.1779                 & -0.0896                 & TRUE       \\\hline
+\end{tabular}
+\caption{Predictors with selection rate greater than or equal to 0.3 from the TPBN II method}
+\label{Proposed model's predictor estimation result}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cccccc}
+\hline
+method              & data  & MSE     & RMSE     & MAE      & $R^2$     \\\hline
+TPBN-MBSP & train & 1222529 & 1105.68  & 721.766 & 0.92 \\
+TPBN-MBSP & test  & 1372508 & 1171.541 & 736.596 & 0.91 \\
+TPBN II model & train & 1222291 & 1105.573 & 722.079 & 0.92 \\
+TPBN II model & test  & 1392910 & 1180.216 & 736.999 & 0.91\\\hline
+\end{tabular}
+\caption{Performance comparison of TPBN-MBSP and proposed model}
+\end{table}
+
+\subsection{House Price Data}
+The second real dataset used in this study is the house price datasets also from Kaggle. This dataset contains residential housing information from Ames, Iowa, and includes 79 explanatory variables describing different aspects of each house, such as building characteristics, location-related information, lot size, basement quality, garage features, and other housing attributes. In this analysis, the response variable is SalePrice, which represents the final sale price of each house. The proposed method and the original TPBN-MBSP method were compared using 10 repeated corss-validation experiments, where 20\% of the observations were used as training data and 80\% were used as testing data. The results show that proposed method achieved substantially better fitting performace on the training data. Specifically, proposed method produced a lower training RMSE, lower MAE, and higher $R^2$ than TPBN-MBSP, indicating that the proposed method was able to capture more information from the training samples.
+
+However, TPBN-MBSP showed better out of sample prediction performance on the testing data. The test RMSE and MAE of TPBN-MBSP were lower than those of proposed method and the test $R^2$ of TPBN-MBSP was also higher. This suggests that although proposed method has stronger fitting ability, it may be more sensitive to the training samples under the current cross-validation setting. Since only 20\% of the observations were used for training, the estimation of a more flexible correlation-aware structure may become unstable, leading to a larger variation in test performance.
+
+Despite this limitation, proposed method provides an important methodological advantage over TPBN-MBSP. The TPBN-MBSP method mainly applies shrinkage to individual regression coefficients, while proposed method further incorporates the correlation structure among predictors through the modified prior covariance structure. This is particularly useful for house price data, where many predictors are highly correlated. For example, variables such as \textbf{garage data}, \textbf{number of garage cars}, \textbf{living area}, \textbf{total rooms}, \textbf{basement area}, and \textbf{first-floor} exhibit strong correlations. By incorporating such structural information, proposed method can identify a broader set of related predictors and provide a more flexible framework for modeling correlated features.
+
+Under the criterion of selection rate greater than or equal to 0.3, the TPBN-MBSP method identified 13 candidate predictors, among which 11 predictors were finally selected based on the 95\% credible interval criterion. In contrast, the proposed method identified 49 candidate predictors with selection rates greater than or equal to 0.3, but only 9 predictors were finally selected after applying the credible interval criterion. This result suggests that the proposed method is able to explore a broader set of potentially relevant predictors across repeated data splits, which may be attributed to its incorporation of the correlation structure among regression coefficients. However, the final selected set remains relatively sparse because the credible interval criterion only retains predictors with stable nonzero effects. Therefore, the proposed method does not simply include more variables in the model; instead, it provides a more correlation-aware screening process while maintaining conservative and stable final variable selection.
+
+In summary, TPBN-MBSP performs better in terms of testing prediction accuracy in the current experiment, while proposed method demonstrates stronger training fit and greater ability to reflect the dependence structure among predictors. Therefore, proposed method can be viewed as a useful extension of TPBN-MBSP for correlated high-dimensional regression settings, although further tuning or stronger regularization may be required to improve its out-of-sample prediction stability.
+
+
+
+\begin{figure}[H]
+    \centering \fontsize{30pt}{30pt}\selectfont
+    \includegraphics[width=1\linewidth]{house price correlation matrix.png}
+    \caption{house data correlation matrix (only show the most important predictors)}
+    \label{house data correlation}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cccccc}
+\hline
+method              & data  & MSE.mean         & RMSE.mean & MAE.mean  & R2.mean \\\hline
+TPBN-MBSP & test  & 1,586,482,132.00 & 39,673.37 & 22,063.60 & 0.75    \\
+TPBN II model & test  & 3,928,193,676.00 & 60,607.99 & 34,958.59 & 0.37    \\
+TPBN-MBSP & train & 498,003,094.00   & 21,771.47 & 14,546.57 & 0.92    \\
+TPBN II model& train & 99,436,324.00    & 9,938.05  & 7,053.84  & 0.98   \\\hline
+\end{tabular}
+\caption{Performance comparison of TPBN-MBSP and TPBN II model}
+\end{table}
+
+\begin{table}[H]
+
+
+\begin{tabular}{ccccc}
+\centering
+\hline
+predictor & $\beta_{scaled\ median}$   & $95\%\ CI_{lower}$   & $95\%\ CI_{upper}$& selected\\\hline
+BsmtExposureGd & 0.0586 & 0.0169 & 0.1141  & TRUE\\
+\textbf{Condition2PosN} & \textbf{-0.2817} & -0.3423 & -0.2182  & TRUE\\
+GarageArea & 0.0562 & 0.0034 & 0.1458  & TRUE\\
+\textbf{GrLivArea} & \textbf{0.3359} & 0.1162 & 0.4735  & TRUE\\
+MasVnrArea & 0.0427 & -0.0010 & 0.1059  & FALSE\\
+NeighborhoodCrawfor & 0.0464 & 0.0030 & 0.0966  & TRUE\\
+NeighborhoodNridgHt & 0.0880 & 0.0386 & 0.1409  & TRUE\\
+NeighborhoodStoneBr & 0.0471 & 0.0074 & 0.0946  & TRUE\\
+OverallCond & 0.0652 & 0.0022 & 0.1231  & TRUE\\
+OverallQual & 0.1676 & 0.0769 & 0.2573  & TRUE\\
+RoofMatlWdShngl & 0.0830 & 0.0308 & 0.1441  & TRUE\\
+TotalBsmtSF & 0.1237 & 0.0074 & 0.3042  & TRUE\\
+YearBuilt & 0.0898 & -0.0007 & 0.2010  & FALSE\\\hline
+\end{tabular}
+\caption{Predictors with selection rate greater than or equal to 0.3 from the TPBN-MBSP method}
+\end{table}
+
+\begin{longtable}{ccccc}
+\hline
+predictor & $\beta_{scaled\ median}$   & $95\%\ CI_{lower}$   & $95\%\ CI_{upper}$  & selected\\ \hline
+BedroomAbvGr & -0.0655 & -0.1353 & 0.0047  & FALSE\\
+BsmtExposureGd & 0.0713 & 0.0243 & 0.1176  & TRUE\\
+BsmtExposureNo & -0.0140 & -0.0605 & 0.0313  & FALSE\\
+BsmtFinType1GLQ & 0.0126 & -0.0443 & 0.0701  & FALSE\\
+BsmtFinType2GLQ & -0.0041 & -0.0748 & 0.0690  & FALSE\\
+
+BsmtQualTA & -0.0421 & -0.1518 & 0.0675  & FALSE\\
+Condition1Norm & 0.0332 & -0.0307 & 0.0963  & FALSE\\
+Condition1RRNe & 0.0054 & -0.0336 & 0.0439  & FALSE\\
+\textbf{Condition2PosN} & \textbf{-0.2739} & -0.3736 & -0.1722 & TRUE\\
+Condition2RRNn & 0.0048 & -0.0803 & 0.0827  & FALSE\\
+
+ElectricalFuseF & 0.0210 & -0.0726 & 0.1129  & FALSE\\
+ExterCondPo & 0.0890 & 0.0037 & 0.1668  & TRUE\\
+\textbf{ExterQualGd} & \textbf{-0.1106} & -0.2257 & -0.0007  & TRUE\\
+\textbf{ExterQualTA} & \textbf{-0.1140} & -0.2495 & 0.0187  & FALSE\\
+Fireplaces & -0.0013 & -0.0958 & 0.0963  & FALSE\\
+
+FoundationCBlock & 0.0417 & -0.0608 & 0.1423 & FALSE\\
+FoundationPConc & 0.0657 & -0.0468 & 0.1760  & FALSE\\
+FoundationWood & -0.0228 & -0.0911 & 0.0483  & FALSE\\
+FullBath & 0.0365 & -0.0385 & 0.1144  & FALSE\\
+FunctionalMod & -0.0424 & -0.1512 & 0.0695  & FALSE\\
+
+GarageArea & 0.0735 & -0.0187 & 0.1660  & FALSE\\
+GarageCars & 0.0316 & -0.0641 & 0.1257  & FALSE\\
+\textbf{GrLivArea} & \textbf{0.2447} & -0.0566 & 0.5420  & FALSE\\
+HalfBath & 0.0118 & -0.0513 & 0.0726  & FALSE\\
+KitchenQualGd & -0.0672 & -0.1539 & 0.0200  & FALSE\\
+
+KitchenQualTA & -0.0785 & -0.1832 & 0.0259  & FALSE\\
+LandContourHLS & 0.0210 & -0.0339 & 0.0769  & FALSE\\
+LotArea & 0.0637 & -0.0228 & 0.1471  & FALSE\\
+LotConfigFR2 & -0.0268 & -0.0622 & 0.0096  & FALSE\\
+LotConfigInside & -0.0088 & -0.0501 & 0.0315  & FALSE\\
+
+LotFrontage & 0.0256 & -0.0327 & 0.0830  & FALSE\\
+LotShapeReg & -0.0034 & -0.0407 & 0.0334  & FALSE\\
+MasVnrArea & 0.0347 & -0.0241 & 0.0930  & FALSE\\
+NeighborhoodClearCr & -0.0430 & -0.1041 & 0.0173  & FALSE\\
+NeighborhoodNAmes & -0.0198 & -0.0801 & 0.0390  & FALSE\\
+
+NeighborhoodNoRidge & 0.0220 & -0.0150 & 0.0591  & FALSE\\
+NeighborhoodNridgHt & 0.0820 & 0.0350 & 0.1298 & TRUE\\
+NeighborhoodNWAmes & -0.0263 & -0.0703 & 0.0183  & FALSE\\
+NeighborhoodStoneBr & 0.0564 & 0.0178 & 0.0954  & TRUE\\
+OverallCond & 0.0807 & 0.0229 & 0.1369 & TRUE\\
+
+\textbf{OverallQual} & \textbf{0.1253} & 0.0404 & 0.2111  & TRUE\\
+\textbf{RoofMatlMetal} & \textbf{0.1019} & 0.0162 & 0.1873  & TRUE\\
+RoofMatlWdShngl & 0.0541 & -0.0522 & 0.1709  & FALSE\\
+SaleConditionNormal & 0.0439 & -0.0188 & 0.1057 & FALSE\\
+StreetPave & -0.0208 & -0.1078 & 0.0646  & FALSE\\
+
+\textbf{TotalBsmtSF} & \textbf{0.1836} & -0.0212 & 0.3895  & FALSE\\
+TotRmsAbvGrd & 0.0401 & -0.0458 & 0.1260  & FALSE\\
+YearBuilt & 0.0365 & -0.1272 & 0.1969 & FALSE\\
+YearRemodAdd & 0.0309 & -0.0477 & 0.1105  & FALSE\\\hline
+
+\caption{Predictors with selection rate greater than or equal to 0.3 from the proposed method}
+\end{longtable}
+
+
+
+
+
+
+
+
+
+\section{Conclusion and Discussion}
+
+The central idea of this thesis is to capture covariance information among regression coefficients by modifying the prior structure. In the original TPBN-MBSP framework, the prior mainly relies on global-local shrinkage to induce sparsity, and the regression coefficients are treated through independent local shrinkage components. Although this structure is effective for high-dimensional sparse regression, it does not explicitly use the correlation information among predictors. When predictors are highly correlated, this limitation may lead to unstable coefficient estimation, arbitrary variable selection within correlated groups, or excessive shrinkage of some truly important variables. Therefore, this thesis proposes a new method that extends the TPBN-MBSP framework by incorporating the predictor correlation structure into the prior covariance matrix.
+
+The simulation studies show that the relative performance of the two methods depends strongly on the correlation structure of the predictors. When the predictors are independent or only moderately correlated, the original TPBN-MBSP method often performs better in estimating individual nonzero coefficients. This result is reasonable because, in such settings, there is little correlation structure for the proposed method to exploit, and the additional covariance component may introduce unnecessary flexibility or stronger regularization. However, as the correlation among predictors becomes stronger, the proposed method begins to show its advantage. In particular, under high or extremely high correlation, TPBN-MBSP tends to over-shrink some truly nonzero coefficients or produce unstable estimates for correlated noise variables. In contrast, the proposed method is more capable of stabilizing estimation by borrowing information across correlated predictors. This advantage is especially clear in the high-dimensional setting, where the proposed method reduces false signals among correlated irrelevant predictors and controls posterior uncertainty more effectively than TPBN-MBSP.
+
+The real data analyses further demonstrate the practical meaning of the proposed method. In the diamond price data, both TPBN-MBSP and the proposed method achieve similar predictive performance. Although the proposed method does not substantially reduce the prediction error, it maintains competitive prediction accuracy while incorporating a more flexible prior covariance structure. In the higher dimensional data, house price data, the proposed method shows stronger fitting ability on the training data, while TPBN-MBSP performs better on the testing data. This indicates that the proposed method may be more flexible but also more sensitive to the training sample, especially when the training proportion is small and the number of predictors is relatively large. Nevertheless, the proposed method identifies a broader set of potentially relevant predictors during repeated cross-validation and then applies the credible interval criterion to retain a sparse final selected set. This behavior suggests that the proposed method does not simply select more variables, but rather provides a correlation-aware screening process before final variable selection.
+
+Overall, the proposed method can be viewed as a structured extension of TPBN-MBSP for high-dimensional regression with highly correlated predictors. Its main contribution is not necessarily a universal improvement in prediction error, but the introduction of a prior covariance structure that explicitly reflects predictor dependence. The simulation and real data results suggest that this structural modification is particularly useful when the data contain strong correlation or near-collinearity among predictors. In such cases, the proposed method can improve estimation stability, reduce false signals among correlated noise variables, and provide a more interpretable Bayesian shrinkage framework.
+
+Several limitations remain for future work. First, the tuning parameter \(\phi\), which controls the strength of the Laplacian component, is fixed in this thesis. A data-adaptive or fully Bayesian treatment of \(\phi\) may improve the balance between sparsity and correlation-aware smoothing. Second, the correlation threshold used to construct the predictor graph may affect the final Laplacian structure, and more systematic threshold selection procedures could be considered. Third, the proposed method may require stronger regularization or more stable tuning strategies in real high-dimensional applications to improve out-of-sample prediction performance. Finally, future studies may extend the current univariate response formulation to the full multivariate TPBN-MBSP setting, where correlations among both predictors and responses can be jointly modeled. These extensions would further strengthen the applicability of the proposed framework to complex high-dimensional and highly correlated data.
+
+
+
+\bibliographystyle{plain}
+\begin{thebibliography}{9}
+
+%\bibitem{BaiGhosh2018}
+%Bai, R., \& Ghosh, M. (2018).
+%High-dimensional multivariate posterior consistency under global--local shrinkage priors.
+%\textit{Journal of Multivariate Analysis}, \textbf{167}, 157--170.
+%
+%\bibitem{Lewandowski2009}
+%Lewandowski, D., Kurowicka, D., \& Joe, H. (2009).
+%Generating random correlation matrices based on vines and extended onion method.
+%\textit{Journal of Multivariate Analysis}, \textbf{100}, 1989--2001.
+
+%\bibitem{}
+%Zou, H., & Hastie, T. (2005). Regularization and variable selection via the elastic net. \textit{J. R. %Statist. Soc}, \textbf{67}, 301--320
+
+%\bibitem{Huang2011}
+%Huang, J., Ma, S., \& Xie, H. (2011).
+%The sparse Laplacian shrinkage estimator for high-dimensional regression.
+%\textit{Annals of Statistics}, \textbf{39}, 2021--2046.
+
+%\bibitem{Liu2014}
+%Liu, F., \& others. (2014).
+%Bayesian regularization via graph Laplacian.
+%\textit{Bayesian Analysis}, \textbf{9}, 1--20.
+
+%\bibitem{Chakraborty2019}
+%Chakraborty, S., \& others. (2019).
+%A graph Laplacian prior for Bayesian variable selection and grouping.
+%\textit{Computational Statistics \& Data Analysis}, \textbf{136}, 72--91.
+
+
+%\bibitem{GhoshHenderson2003}
+%Ghosh, S., \& Henderson, S.G. (2003).
+%Behavior of the norta method for correlated random vector generation as the dimension increases.
+%\textit{ACM Transactions on Modeling and Computer Simulation}, \textbf{13}, 276--294.
+%
+%%
+
+
+
+% Chapter 1: High-dimensional regression with highly correlated predictors
+
+\bibitem{BaiGhosh2018}
+Bai, R., \& Ghosh, M. (2018).
+High-dimensional multivariate posterior consistency under global--local shrinkage priors.
+\textit{Journal of Multivariate Analysis}, \textbf{167}, 157--170.
+
+\bibitem{Lewandowski2009}
+Lewandowski, D., Kurowicka, D., \& Joe, H. (2009).
+Generating random correlation matrices based on vines and extended onion method.
+\textit{Journal of Multivariate Analysis}, \textbf{100}, 1989--2001.
+
+\bibitem{GhoshHenderson2003}
+Ghosh, S., \& Henderson, S.G. (2003).
+Behavior of the norta method for correlated random vector generation as the dimension increases.
+\textit{ACM Transactions on Modeling and Computer Simulation}, \textbf{13}, 276--294.
+
+\bibitem{zou2005elasticnet}
+Zou, H., \& Hastie, T. (2005). Regularization and variable selection via the elastic net. \textit{Journal of the Royal Statistical Society: Series B}, \textbf{67}(2), 301--320.
+
+\bibitem{friedman2010glmnet}
+Friedman, J., Hastie, T., \& Tibshirani, R. (2010). Regularization paths for generalized linear models via coordinate descent. \textit{Journal of Statistical Software}, \textbf{33}(1), 1--22.
+
+\bibitem{bondell2008oscar}
+Bondell, H. D., \& Reich, B. J. (2008). Simultaneous regression shrinkage, variable selection, and supervised clustering of predictors with OSCAR. \textit{Biometrics}, \textbf{64}(1), 115--123.
+
+\bibitem{yuan2006grouplasso}
+Yuan, M., \& Lin, Y. (2006). Model selection and estimation in regression with grouped variables. \textit{Journal of the Royal Statistical Society: Series B}, \textbf{68}(1), 49--67.
+
+\bibitem{meier2008grouplogistic}
+Meier, L., van de Geer, S., \& B\"uhlmann, P. (2008). The group lasso for logistic regression. \textit{Journal of the Royal Statistical Society: Series B}, \textbf{70}(1), 53--71.
+
+\bibitem{simon2013sgl}
+Simon, N., Friedman, J., Hastie, T., \& Tibshirani, R. (2013). A sparse-group lasso. \textit{Journal of Computational and Graphical Statistics}, \textbf{22}(2), 231--245.
+
+\bibitem{tibshirani2005fused}
+Tibshirani, R., Saunders, M., Rosset, S., Zhu, J., \& Knight, K. (2005). Sparsity and smoothness via the fused lasso. \textit{Journal of the Royal Statistical Society: Series B}, \textbf{67}(1), 91--108.
+
+\bibitem{tibshirani2011genlasso}
+Tibshirani, R. J., \& Taylor, J. (2011). The solution path of the generalized lasso. \textit{Annals of Statistics}, \textbf{39}(3), 1335--1371.
+
+\bibitem{sharpnack2012edgelasso}
+Sharpnack, J., Singh, A., \& Rinaldo, A. (2012). Sparsistency of the edge lasso over graphs. In \textit{Proceedings of the Fifteenth International Conference on Artificial Intelligence and Statistics (AISTATS)}, \textbf{22}, 918--926.
+
+\bibitem{wang2016graphtrend}
+Wang, Y.-X., Sharpnack, J., Smola, A., \& Tibshirani, R. J. (2016). Trend filtering on graphs. \textit{Journal of Machine Learning Research}, \textbf{17}, 1--41.
+
+\bibitem{li2020alignedgraph}
+Li, Y., Mark, B., Raskutti, G., Willett, R., Song, H., \& Neiman, D. (2020). Graph-based regularization for regression problems with alignment and highly-correlated designs. \textit{SIAM Journal on Mathematics of Data Science}, \textbf{2}(2), 480--504.
+
+\bibitem{meinshausen2010stability}
+Meinshausen, N., \& B\"uhlmann, P. (2010). Stability selection. \textit{Journal of the Royal Statistical Society: Series B}, \textbf{72}(4), 417--473.
+
+\bibitem{shah2013cpstability}
+Shah, R. D., \& Samworth, R. J. (2013). Variable selection with error control: Another look at stability selection. \textit{Journal of the Royal Statistical Society: Series B}, \textbf{75}(1), 55--80.
+
+\bibitem{vandegeer2014debiased}
+van de Geer, S., B\"uhlmann, P., Ritov, Y., \& Dezeure, R. (2014). On asymptotically optimal confidence regions and tests for high-dimensional models. \textit{Annals of Statistics}, \textbf{42}(3), 1166--1202.
+
+\bibitem{barber2015knockoff}
+Barber, R. F., \& Cand\`es, E. J. (2015). Controlling the false discovery rate via knockoffs. \textit{Annals of Statistics}, \textbf{43}(5), 2055--2085.
+
+% Chapter 2: Graph Laplacian in regression
+
+\bibitem{li2008network}
+Li, C., \& Li, H. (2008). Network-constrained regularization and variable selection for analysis of genomic data. \textit{Bioinformatics}, \textbf{24}(9), 1175--1182.
+
+\bibitem{li2010grace}
+Li, C., \& Li, H. (2010). Variable selection and regression analysis for graph-structured covariates with an application to genomics. \textit{Annals of Applied Statistics}, \textbf{4}(3), 1498--1516.
+
+\bibitem{huang2011sls}
+Huang, J., Ma, S., Li, H., \& Zhang, C.-H. (2011). The sparse Laplacian shrinkage estimator for high-dimensional regression. \textit{Annals of Statistics}, \textbf{39}(4), 2021--2046.
+
+\bibitem{sun2012logisticlaplacian}
+Sun, W., \& Wang, S. (2012). Penalized logistic regression for high-dimensional DNA methylation data with case-control studies. \textit{Bioinformatics}, \textbf{28}(10), 1368--1375.
+
+\bibitem{sun2014coxnetwork}
+Sun, H., Lin, W., Feng, R., \& Li, H. (2014). Network-regularized high-dimensional Cox regression for analysis of genomic data. \textit{Statistica Sinica}, \textbf{24}, 1433--1459.
+
+\bibitem{liu2014brgl}
+Liu, F., Chakraborty, S., Li, F., Liu, Y., \& Lozano, A. C. (2014). Bayesian regularization via graph Laplacian. \textit{Bayesian Analysis}, \textbf{9}(2), 449--474.
+
+\bibitem{chakraborty2019glprior}
+Chakraborty, S., \& Lozano, A. C. (2019). A graph Laplacian prior for Bayesian variable selection and grouping. \textit{Computational Statistics \& Data Analysis}, \textbf{136}, 72--91.
+
+\bibitem{cai2020tglg}
+Cai, Q., Kang, J., \& Yu, T. (2020). Bayesian network marker selection via the thresholded graph Laplacian Gaussian prior. \textit{Bayesian Analysis}, \textbf{15}(1), 147--176.
+
+% Chapter 3: TPBN and related Bayesian shrinkage priors
+
+\bibitem{armagan2011tpbn}
+Armagan, A., Dunson, D. B., \& Clyde, M. (2011). Generalized beta mixtures of Gaussians. In \textit{Advances in Neural Information Processing Systems 24}, 523--531.
+
+\bibitem{carvalho2010horseshoe}
+Carvalho, C. M., Polson, N. G., \& Scott, J. G. (2010). The horseshoe estimator for sparse signals. \textit{Biometrika}, \textbf{97}(2), 465--480.
+
+\bibitem{xu2016groupedhorseshoe}
+Xu, Z., Schmidt, D. F., Makalic, E., Qian, G., \& Hopper, J. L. (2016). Bayesian grouped horseshoe regression with application to additive models. In \textit{AI 2016: Advances in Artificial Intelligence}, \textbf{LNCS 9992}, 229--244.
+
+\bibitem{bhadra2017horseshoeplus}
+Bhadra, A., Datta, J., Polson, N. G., \& Willard, B. (2017). The horseshoe+ estimator of ultra-sparse signals. \textit{Bayesian Analysis}, \textbf{12}(4), 1105--1131.
+
+\bibitem{piironen2017hyperprior}
+Piironen, J., \& Vehtari, A. (2017). On the hyperprior choice for the global shrinkage parameter in the horseshoe prior. In \textit{Proceedings of the 20th International Conference on Artificial Intelligence and Statistics (AISTATS)}, \textbf{54}, 905--913.
+
+\bibitem{armagan2013consistency}
+Armagan, A., Dunson, D. B., Lee, J., Bajwa, W. U., \& Strawn, N. (2013). Posterior consistency in linear models under shrinkage priors. \textit{Biometrika}, \textbf{100}(4), 1011--1023.
+
+\bibitem{vanderpas2017uq}
+van der Pas, S., Szab\'o, B., \& van der Vaart, A. (2017). Uncertainty quantification for the horseshoe (with discussion). \textit{Bayesian Analysis}, \textbf{12}(4), 1221--1274.
+
+\bibitem{armagan2013gdp}
+Armagan, A., Dunson, D. B., \& Lee, J. (2013). Generalized double Pareto shrinkage. \textit{Statistica Sinica}, \textbf{23}(1), 119--143.
+
+\bibitem{polson2012levy}
+Polson, N. G., \& Scott, J. G. (2012). Local shrinkage rules, L\'evy processes and regularized regression. \textit{Journal of the Royal Statistical Society: Series B}, \textbf{74}(2), 287--311.
+
+
+
+\end{thebibliography}
+
+
+
+
+\end{document}
