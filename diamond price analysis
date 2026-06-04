@@ -1,0 +1,497 @@
+run_diamonds_MBSP_CV <- function(file_path = "diamonds.csv",
+                                 response_col = "price",
+                                 train_prop = 0.8,
+                                 n_splits = 10,
+                                 include_categorical = TRUE,
+                                 include_intercept = TRUE,
+                                 seed = 123,
+                                 max_steps = 2000,
+                                 burnin = 500,
+                                 u = 0.5,
+                                 a = 0.5,
+                                 run_MBSP_package = TRUE,
+                                 run_version2 = TRUE,
+                                 version2_eta = 1,
+                                 version2_phi = 1,
+                                 version2_c_threshold = 0.3,
+                                 version2_update_R = FALSE,
+                                 version2_R_update_every = 20,
+                                 verbose = TRUE) {
+  
+  if (run_MBSP_package && !requireNamespace("MBSP", quietly = TRUE)) {
+    stop("Please install MBSP first: install.packages('MBSP')")
+  }
+  
+  if (run_version2 && !exists("MBSP_version2")) {
+    stop("MBSP_version2() is not found. Please source your Version 2 code first.")
+  }
+  
+  dat <- read.csv(file_path, stringsAsFactors = FALSE)
+  
+  if (!(response_col %in% names(dat))) {
+    stop("Response column not found: ", response_col)
+  }
+  
+  dat <- dat[!is.na(dat[[response_col]]), , drop = FALSE]
+  
+  predictor_cols_all <- setdiff(names(dat), response_col)
+  
+  numeric_cols_all <- predictor_cols_all[
+    sapply(dat[, predictor_cols_all, drop = FALSE], is.numeric)
+  ]
+  
+  categorical_cols_all <- setdiff(predictor_cols_all, numeric_cols_all)
+  
+  if (include_categorical) {
+    predictor_cols <- predictor_cols_all
+  } else {
+    predictor_cols <- numeric_cols_all
+  }
+  
+  numeric_cols <- intersect(numeric_cols_all, predictor_cols)
+  categorical_cols <- intersect(categorical_cols_all, predictor_cols)
+  
+  if (include_categorical && length(categorical_cols) > 0) {
+    for (cc in categorical_cols) {
+      dat[[cc]] <- as.character(dat[[cc]])
+      dat[[cc]][is.na(dat[[cc]]) | dat[[cc]] == ""] <- "Missing"
+      dat[[cc]] <- factor(dat[[cc]])
+    }
+  }
+  
+  make_design_split <- function(train_dat, test_dat) {
+    
+    if (length(numeric_cols) > 0) {
+      for (cc in numeric_cols) {
+        med <- median(train_dat[[cc]], na.rm = TRUE)
+        if (!is.finite(med)) med <- 0
+        
+        train_dat[[cc]][is.na(train_dat[[cc]])] <- med
+        test_dat[[cc]][is.na(test_dat[[cc]])] <- med
+      }
+    }
+    
+    if (include_categorical && length(categorical_cols) > 0) {
+      for (cc in categorical_cols) {
+        lv <- levels(dat[[cc]])
+        train_dat[[cc]] <- factor(as.character(train_dat[[cc]]), levels = lv)
+        test_dat[[cc]] <- factor(as.character(test_dat[[cc]]), levels = lv)
+      }
+    }
+    
+    train_model_dat <- train_dat[, c(response_col, predictor_cols), drop = FALSE]
+    test_model_dat <- test_dat[, c(response_col, predictor_cols), drop = FALSE]
+    
+    form <- reformulate(termlabels = predictor_cols, response = response_col)
+    
+    X_train_raw <- model.matrix(form, data = train_model_dat)[, -1, drop = FALSE]
+    X_test_raw <- model.matrix(form, data = test_model_dat)[, -1, drop = FALSE]
+    
+    missing_in_test <- setdiff(colnames(X_train_raw), colnames(X_test_raw))
+    if (length(missing_in_test) > 0) {
+      add_mat <- matrix(0, nrow = nrow(X_test_raw), ncol = length(missing_in_test))
+      colnames(add_mat) <- missing_in_test
+      X_test_raw <- cbind(X_test_raw, add_mat)
+    }
+    
+    extra_in_test <- setdiff(colnames(X_test_raw), colnames(X_train_raw))
+    if (length(extra_in_test) > 0) {
+      X_test_raw <- X_test_raw[, setdiff(colnames(X_test_raw), extra_in_test), drop = FALSE]
+    }
+    
+    X_test_raw <- X_test_raw[, colnames(X_train_raw), drop = FALSE]
+    
+    y_train_raw <- train_dat[[response_col]]
+    y_test_raw <- test_dat[[response_col]]
+    
+    x_sd_raw <- apply(X_train_raw, 2, sd)
+    keep_cols <- which(is.finite(x_sd_raw) & x_sd_raw > 0)
+    
+    X_train_raw <- X_train_raw[, keep_cols, drop = FALSE]
+    X_test_raw <- X_test_raw[, keep_cols, drop = FALSE]
+    
+    x_sd <- apply(X_train_raw, 2, sd)
+    x_sd[!is.finite(x_sd) | x_sd <= 0] <- 1
+    
+    if (include_intercept) {
+      x_center <- colMeans(X_train_raw)
+      y_center <- mean(y_train_raw)
+    } else {
+      x_center <- rep(0, ncol(X_train_raw))
+      names(x_center) <- colnames(X_train_raw)
+      y_center <- 0
+    }
+    
+    y_sd <- sd(y_train_raw)
+    if (!is.finite(y_sd) || y_sd <= 0) y_sd <- 1
+    
+    X_train <- scale(X_train_raw, center = x_center, scale = x_sd)
+    X_test <- scale(X_test_raw, center = x_center, scale = x_sd)
+    
+    y_train <- as.numeric((y_train_raw - y_center) / y_sd)
+    
+    list(
+      X_train = X_train,
+      X_test = X_test,
+      y_train = y_train,
+      y_train_raw = y_train_raw,
+      y_test_raw = y_test_raw,
+      x_center = x_center,
+      x_sd = x_sd,
+      y_center = y_center,
+      y_sd = y_sd,
+      predictors = colnames(X_train)
+    )
+  }
+  
+  performance_metrics <- function(y_true, y_pred) {
+    mse <- mean((y_true - y_pred)^2)
+    rmse <- sqrt(mse)
+    mae <- mean(abs(y_true - y_pred))
+    r2 <- 1 - sum((y_true - y_pred)^2) / sum((y_true - mean(y_true))^2)
+    
+    data.frame(
+      MSE = mse,
+      RMSE = rmse,
+      MAE = mae,
+      R2 = r2
+    )
+  }
+  
+  original_scale_coef <- function(beta_scaled, ci_lower_scaled, ci_upper_scaled,
+                                  x_center, x_sd, y_center, y_sd, predictors) {
+    
+    beta_raw <- y_sd * beta_scaled / x_sd
+    ci_lower_raw <- y_sd * ci_lower_scaled / x_sd
+    ci_upper_raw <- y_sd * ci_upper_scaled / x_sd
+    
+    if (include_intercept) {
+      intercept_raw <- y_center - sum(beta_raw * x_center)
+    } else {
+      intercept_raw <- 0
+    }
+    
+    coef_df <- data.frame(
+      predictor = predictors,
+      beta_scaled_median = beta_scaled,
+      CI_lower_scaled = ci_lower_scaled,
+      CI_upper_scaled = ci_upper_scaled,
+      beta_raw = beta_raw,
+      CI_lower_raw = ci_lower_raw,
+      CI_upper_raw = ci_upper_raw,
+      selected = ci_lower_scaled > 0 | ci_upper_scaled < 0
+    )
+    
+    intercept_df <- data.frame(
+      predictor = "(Intercept)",
+      beta_scaled_median = NA_real_,
+      CI_lower_scaled = NA_real_,
+      CI_upper_scaled = NA_real_,
+      beta_raw = intercept_raw,
+      CI_lower_raw = NA_real_,
+      CI_upper_raw = NA_real_,
+      selected = NA
+    )
+    
+    rbind(intercept_df, coef_df)
+  }
+  
+  numeric_cor_cols <- c(response_col, numeric_cols)
+  dat_cor_numeric <- dat[, numeric_cor_cols, drop = FALSE]
+  numeric_cor <- cor(dat_cor_numeric, use = "complete.obs")
+  
+  set.seed(seed)
+  
+  perf_list <- list()
+  coef_list <- list()
+  pred_list <- list()
+  split_info_list <- list()
+  
+  n_total <- nrow(dat)
+  n_train <- floor(train_prop * n_total)
+  
+  for (split_id in 1:n_splits) {
+    
+    if (verbose) {
+      cat("Split", split_id, "of", n_splits, "\n")
+    }
+    
+    train_id <- sample(seq_len(n_total), size = n_train)
+    test_id <- setdiff(seq_len(n_total), train_id)
+    
+    train_dat <- dat[train_id, , drop = FALSE]
+    test_dat <- dat[test_id, , drop = FALSE]
+    
+    dd <- make_design_split(train_dat, test_dat)
+    
+    X_train <- dd$X_train
+    X_test <- dd$X_test
+    y_train <- dd$y_train
+    
+    if (verbose) {
+      cat("  n_train =", nrow(X_train),
+          ", n_test =", nrow(X_test),
+          ", p =", ncol(X_train), "\n")
+    }
+    
+    split_info_list[[split_id]] <- data.frame(
+      split = split_id,
+      n_train = nrow(X_train),
+      n_test = nrow(X_test),
+      p = ncol(X_train),
+      include_categorical = include_categorical,
+      include_intercept = include_intercept
+    )
+    
+    if (run_MBSP_package) {
+      
+      if (verbose) cat("  Running MBSP package TPBN-MBSP...\n")
+      
+      Y_train_MBSP <- cbind(
+        price = y_train,
+        aux = rnorm(length(y_train))
+      )
+      
+      fit_MBSP <- MBSP::MBSP(
+        Y = Y_train_MBSP,
+        X = X_train,
+        u = u,
+        a = a,
+        max_steps = max_steps,
+        burnin = burnin,
+        save_samples = TRUE,
+        model_criteria = FALSE
+      )
+      
+      beta_scaled <- as.numeric(fit_MBSP$B_est[, 1])
+      ci_lower_scaled <- as.numeric(fit_MBSP$B_CI_lower[, 1])
+      ci_upper_scaled <- as.numeric(fit_MBSP$B_CI_upper[, 1])
+      
+      pred_train_raw <- dd$y_center + dd$y_sd * as.numeric(X_train %*% beta_scaled)
+      pred_test_raw <- dd$y_center + dd$y_sd * as.numeric(X_test %*% beta_scaled)
+      
+      perf_train <- performance_metrics(dd$y_train_raw, pred_train_raw)
+      perf_test <- performance_metrics(dd$y_test_raw, pred_test_raw)
+      
+      perf_list[[length(perf_list) + 1]] <- rbind(
+        data.frame(split = split_id, method = "MBSP_package_TPBN", data = "train", perf_train),
+        data.frame(split = split_id, method = "MBSP_package_TPBN", data = "test", perf_test)
+      )
+      
+      coef_df <- original_scale_coef(
+        beta_scaled = beta_scaled,
+        ci_lower_scaled = ci_lower_scaled,
+        ci_upper_scaled = ci_upper_scaled,
+        x_center = dd$x_center,
+        x_sd = dd$x_sd,
+        y_center = dd$y_center,
+        y_sd = dd$y_sd,
+        predictors = dd$predictors
+      )
+      
+      coef_list[[length(coef_list) + 1]] <- data.frame(
+        split = split_id,
+        method = "MBSP_package_TPBN",
+        coef_df
+      )
+      
+      pred_list[[length(pred_list) + 1]] <- data.frame(
+        split = split_id,
+        method = "MBSP_package_TPBN",
+        y_test = dd$y_test_raw,
+        y_pred = pred_test_raw,
+        residual = dd$y_test_raw - pred_test_raw
+      )
+    }
+    
+    if (run_version2) {
+      
+      if (verbose) cat("  Running Version 2 Laplacian model...\n")
+      
+      fit_V2 <- MBSP_version2(
+        y = y_train,
+        X = X_train,
+        u = u,
+        a = a,
+        eta = version2_eta,
+        c_threshold = version2_c_threshold,
+        phi = version2_phi,
+        max_steps = max_steps,
+        burnin = burnin,
+        update_R = version2_update_R,
+        R_update_every = version2_R_update_every,
+        center_X = FALSE,
+        center_y = FALSE,
+        save_samples = TRUE,
+        verbose = verbose
+      )
+      
+      beta_scaled <- as.numeric(fit_V2$B_est)
+      ci_lower_scaled <- as.numeric(fit_V2$B_CI_lower)
+      ci_upper_scaled <- as.numeric(fit_V2$B_CI_upper)
+      
+      pred_train_raw <- dd$y_center + dd$y_sd * as.numeric(X_train %*% beta_scaled)
+      pred_test_raw <- dd$y_center + dd$y_sd * as.numeric(X_test %*% beta_scaled)
+      
+      perf_train <- performance_metrics(dd$y_train_raw, pred_train_raw)
+      perf_test <- performance_metrics(dd$y_test_raw, pred_test_raw)
+      
+      perf_list[[length(perf_list) + 1]] <- rbind(
+        data.frame(split = split_id, method = "Version2_Laplacian", data = "train", perf_train),
+        data.frame(split = split_id, method = "Version2_Laplacian", data = "test", perf_test)
+      )
+      
+      coef_df <- original_scale_coef(
+        beta_scaled = beta_scaled,
+        ci_lower_scaled = ci_lower_scaled,
+        ci_upper_scaled = ci_upper_scaled,
+        x_center = dd$x_center,
+        x_sd = dd$x_sd,
+        y_center = dd$y_center,
+        y_sd = dd$y_sd,
+        predictors = dd$predictors
+      )
+      
+      coef_list[[length(coef_list) + 1]] <- data.frame(
+        split = split_id,
+        method = "Version2_Laplacian",
+        coef_df
+      )
+      
+      pred_list[[length(pred_list) + 1]] <- data.frame(
+        split = split_id,
+        method = "Version2_Laplacian",
+        y_test = dd$y_test_raw,
+        y_pred = pred_test_raw,
+        residual = dd$y_test_raw - pred_test_raw
+      )
+    }
+  }
+  
+  performance_each_split <- do.call(rbind, perf_list)
+  coefficient_each_split <- do.call(rbind, coef_list)
+  prediction_each_split <- do.call(rbind, pred_list)
+  split_info <- do.call(rbind, split_info_list)
+  
+  performance_summary <- aggregate(
+    cbind(MSE, RMSE, MAE, R2) ~ method + data,
+    data = performance_each_split,
+    FUN = function(x) c(mean = mean(x), sd = sd(x))
+  )
+  performance_summary <- do.call(data.frame, performance_summary)
+  
+  coefficient_summary <- aggregate(
+    cbind(beta_raw, beta_scaled_median) ~ method + predictor,
+    data = coefficient_each_split,
+    FUN = function(x) c(mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE))
+  )
+  coefficient_summary <- do.call(data.frame, coefficient_summary)
+  
+  selected_summary <- aggregate(
+    selected ~ method + predictor,
+    data = coefficient_each_split[coefficient_each_split$predictor != "(Intercept)", ],
+    FUN = function(x) mean(x, na.rm = TRUE)
+  )
+  names(selected_summary)[names(selected_summary) == "selected"] <- "selection_rate"
+  
+  list(
+    performance_each_split = performance_each_split,
+    performance_summary = performance_summary,
+    coefficient_each_split = coefficient_each_split,
+    coefficient_summary = coefficient_summary,
+    selected_summary = selected_summary,
+    prediction_each_split = prediction_each_split,
+    split_info = split_info,
+    numeric_cor = numeric_cor,
+    settings = list(
+      file_path = file_path,
+      response_col = response_col,
+      train_prop = train_prop,
+      test_prop = 1 - train_prop,
+      n_splits = n_splits,
+      include_categorical = include_categorical,
+      include_intercept = include_intercept,
+      max_steps = max_steps,
+      burnin = burnin,
+      u = u,
+      a = a,
+      run_MBSP_package = run_MBSP_package,
+      run_version2 = run_version2,
+      version2_update_R = version2_update_R
+    )
+  )
+}
+
+diamonds_cv <- run_diamonds_MBSP_CV(
+  file_path = "D:/paper/diamond data/diamonds.csv",
+  train_prop = 0.15,
+  n_splits = 10,
+  include_categorical = TRUE,
+  include_intercept = TRUE,
+  max_steps = 3000,
+  burnin = 2000,
+  run_MBSP_package = TRUE,
+  run_version2 = TRUE,
+  version2_update_R = TRUE,
+  verbose = TRUE
+)
+
+diamonds_cv$performance_summary
+diamonds_cv$selected_summary
+diamonds_cv$coefficient_summary
+diamonds_cv$numeric_cor
+
+
+
+cv_ci_summary <- function(cv_out, scale = c("raw", "scaled")) {
+  
+  scale <- match.arg(scale)
+  
+  coef_df <- cv_out$coefficient_each_split
+  
+  # 不看截距項的 CI，因為截距項不是 MCMC 直接抽出來的
+  coef_df <- subset(coef_df, predictor != "(Intercept)")
+  
+  if (scale == "raw") {
+    beta_col <- "beta_raw"
+    lower_col <- "CI_lower_raw"
+    upper_col <- "CI_upper_raw"
+  } else {
+    beta_col <- "beta_scaled_median"
+    lower_col <- "CI_lower_scaled"
+    upper_col <- "CI_upper_scaled"
+  }
+  
+  beta_summary <- aggregate(
+    coef_df[, c(beta_col, lower_col, upper_col)],
+    by = list(
+      method = coef_df$method,
+      predictor = coef_df$predictor
+    ),
+    FUN = function(x) c(mean = mean(x, na.rm = TRUE),
+                        sd = sd(x, na.rm = TRUE))
+  )
+  
+  beta_summary <- do.call(data.frame, beta_summary)
+  
+  selected_summary <- aggregate(
+    selected ~ method + predictor,
+    data = coef_df,
+    FUN = function(x) mean(x, na.rm = TRUE)
+  )
+  
+  names(selected_summary)[names(selected_summary) == "selected"] <- "selection_rate"
+  
+  result <- merge(
+    beta_summary,
+    selected_summary,
+    by = c("method", "predictor")
+  )
+  
+  return(result)
+}
+diamond_ci_raw <- cv_ci_summary(diamonds_cv, scale = "raw")
+diamond_ci_scaled <- cv_ci_summary(diamonds_cv, scale = "scaled")
+
+diamond_ci_raw
+diamond_ci_scaled
